@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none" role="img" aria-label="InspectDraft">
+  <!-- House outline -->
+  <path d="M12 28 L32 10 L52 28 V52 H38 V38 H26 V52 H12 Z" stroke="#FFFFFF" stroke-width="3.2" stroke-linejoin="round" fill="none"/>
+  <!-- 4-pane window -->
+  <rect x="28" y="22" width="8" height="8" stroke="#FFFFFF" stroke-width="2" fill="none"/>
+  <line x1="32" y1="22" x2="32" y2="30" stroke="#FFFFFF" stroke-width="2"/>
+  <line x1="28" y1="26" x2="36" y2="26" stroke="#FFFFFF" stroke-width="2"/>
+  <!-- Green checkmark overlapping bottom-left -->
+  <path d="M8 44 L14 50 L24 36" stroke="#00C853" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+</svg>

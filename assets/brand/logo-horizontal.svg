@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 64" fill="none" role="img" aria-label="InspectDraft">
+  <g transform="translate(0,0)">
+    <path d="M12 28 L32 10 L52 28 V52 H38 V38 H26 V52 H12 Z" stroke="#0B2D4A" stroke-width="3.2" stroke-linejoin="round" fill="none"/>
+    <rect x="28" y="22" width="8" height="8" stroke="#0B2D4A" stroke-width="2" fill="none"/>
+    <line x1="32" y1="22" x2="32" y2="30" stroke="#0B2D4A" stroke-width="2"/>
+    <line x1="28" y1="26" x2="36" y2="26" stroke="#0B2D4A" stroke-width="2"/>
+    <path d="M8 44 L14 50 L24 36" stroke="#00C853" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  </g>
+  <text x="68" y="34" font-family="Montserrat, system-ui, sans-serif" font-size="26" font-weight="700">
+    <tspan fill="#0B2D4A">Inspect</tspan><tspan fill="#00C853">Draft</tspan>
+  </text>
+  <text x="68" y="52" font-family="Montserrat, system-ui, sans-serif" font-size="8" font-weight="600" letter-spacing="2.4" fill="#1F2937">INSPECT / CAPTURE / REPORT</text>
+</svg>
