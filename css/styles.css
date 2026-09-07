@@ -810,6 +810,48 @@ img { max-width: 100%; display: block; }
   color: var(--text-dim);
 }
 
+.icon-pick-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.icon-pick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  aspect-ratio: 1;
+  min-height: 52px;
+  border-radius: var(--radius);
+  border: 2px solid var(--border);
+  background: var(--bg-card);
+  font-size: 1.35rem;
+  cursor: pointer;
+  transition: border-color 0.15s, background 0.15s, box-shadow 0.15s;
+  color: var(--text);
+}
+
+.icon-pick:hover,
+.icon-pick:focus-visible {
+  border-color: var(--navy, #0A2540);
+  outline: none;
+}
+
+.icon-pick.is-selected {
+  border-color: var(--accent, #00C853);
+  background: color-mix(in srgb, var(--accent, #00C853) 14%, var(--bg-card));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent, #00C853) 28%, transparent);
+}
+
+[data-theme="dark"] .icon-pick.is-selected {
+  background: rgba(0, 200, 83, 0.18);
+}
+
+.sections-overflow[aria-label="Add custom system"]:hover {
+  border-color: var(--accent, #00C853);
+  color: var(--navy, #0A2540);
+}
+
 .optional-section-footer {
   display: flex;
   align-items: center;

@@ -29,15 +29,16 @@ No build step. Vanilla HTML / CSS / JS. Data persists in `localStorage`.
 2. **Jobs list** — create / open / delete jobs (address, client, date, inspector)
 3. **Seeded sample job** — Austin address with Roof, Electrical, Plumbing, HVAC, Exterior, Grounds, Limitations already filled so the demo works immediately
 4. **12 core sections** — Roof, Exterior, Structure, Electrical, Plumbing, HVAC, Interior, Insulation/Ventilation, Appliances, Garage, Grounds, Limitations / Not Inspected (default template)
-5. **Opt-in optional systems** — Pool / Spa, Irrigation / Sprinklers, Outbuildings / Detached structures, Dock / Waterfront. Add via **Add optional system** (or menu) on Sections. Not added → omitted from list and PDF. Added but empty → Not recorded (same as core). Removable with confirm. Sample job leaves optionals off.
-6. **Per section** — text notes, photos (file / camera), editable findings; **Structure notes** is the hero action
-7. **Empty sections** — hint: “Walk a system, add notes, structure, export.”
-8. **Structure notes (stub AI)** — client-side heuristics split notes into `{observation, recommendation}`; labeled as stub AI; confirms before replacing findings
-9. **Edit / delete findings** before export
-10. **Preview + Export** — print-friendly HTML report; browser Print → Save as PDF
-11. **Disclaimer footer** — *“Draft for professional review. AI-assisted structuring — verify all findings.”*
-12. **Empty sections** → **Not recorded** (blank ≠ pass)
-13. **Light field UI** (navy chrome) with optional dark toggle; large tap targets, mobile-first layout
+5. **Opt-in optional systems** — Pool / Spa, Irrigation / Sprinklers, Outbuildings / Detached structures, Dock / Waterfront. Add via **＋ Add optional system** on Sections (preset picker). Not added → omitted from list and PDF. Added but empty → Not recorded (same as core). Removable with confirm. Sample job leaves optionals off.
+6. **Custom optional systems** — ☰ (**Add custom system**) opens a name + icon picker (house, pool, solar, tree, fence, flame, water, wrench, camera, bolt, shield, warehouse). Creates a job-only optional (id, title, iconKey in localStorage). Same omit / Not recorded / removable rules as presets. Does not alter the core 12.
+7. **Per section** — text notes, photos (file / camera), editable findings; **Structure notes** is the hero action
+8. **Empty sections** — hint: “Walk a system, add notes, structure, export.”
+9. **Structure notes (stub AI)** — client-side heuristics split notes into `{observation, recommendation}`; labeled as stub AI; confirms before replacing findings
+10. **Edit / delete findings** before export
+11. **Preview + Export** — print-friendly HTML report; browser Print → Save as PDF
+12. **Disclaimer footer** — *“Draft for professional review. AI-assisted structuring — verify all findings.”*
+13. **Empty sections** → **Not recorded** (blank ≠ pass)
+14. **Light field UI** (navy chrome) with optional dark toggle; large tap targets, mobile-first layout
 
 ## Out of scope (by design)
 

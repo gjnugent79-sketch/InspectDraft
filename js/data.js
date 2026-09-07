@@ -34,6 +34,22 @@ function emptySection() {
   return { notes: '', photos: [], findings: [] };
 }
 
+/** Icon choices for job-only custom optional systems (☰ → Add custom system). */
+const CUSTOM_ICONS = [
+  { key: 'house', icon: '🏠', label: 'House' },
+  { key: 'pool', icon: '🏊', label: 'Pool' },
+  { key: 'sun', icon: '☀️', label: 'Solar' },
+  { key: 'tree', icon: '🌳', label: 'Tree' },
+  { key: 'fence', icon: '🚧', label: 'Fence' },
+  { key: 'flame', icon: '🔥', label: 'Flame' },
+  { key: 'droplet', icon: '💧', label: 'Water' },
+  { key: 'wrench', icon: '🔧', label: 'Wrench' },
+  { key: 'camera', icon: '📷', label: 'Camera' },
+  { key: 'bolt', icon: '⚡', label: 'Bolt' },
+  { key: 'shield', icon: '🛡️', label: 'Shield' },
+  { key: 'warehouse', icon: '🏭', label: 'Warehouse' },
+];
+
 function createJob(meta) {
   const sections = {};
   SECTIONS.forEach((s) => { sections[s.id] = emptySection(); });
@@ -48,50 +64,112 @@ function createJob(meta) {
     isSample: !!meta.isSample,
     /** Ids from OPTIONAL_SECTIONS the inspector opted into for this job. Default: none. */
     optionalSectionIds: Array.isArray(meta.optionalSectionIds) ? meta.optionalSectionIds.slice() : [],
+    /** Job-only custom optionals: { id, title, iconKey }. Default: none. */
+    customSections: Array.isArray(meta.customSections) ? meta.customSections.map(normalizeCustomSection).filter(Boolean) : [],
     sections,
   };
+}
+
+function normalizeCustomSection(c) {
+  if (!c || typeof c !== 'object') return null;
+  const title = String(c.title || '').trim();
+  if (!title) return null;
+  let id = String(c.id || '').trim();
+  if (!id) id = 'custom_' + uid().replace(/^id_/, '');
+  if (!id.startsWith('custom_')) id = 'custom_' + id;
+  const iconKey = CUSTOM_ICONS.some((i) => i.key === c.iconKey) ? c.iconKey : CUSTOM_ICONS[0].key;
+  return { id, title, iconKey };
+}
+
+function getCustomIcon(iconKey) {
+  const found = CUSTOM_ICONS.find((i) => i.key === iconKey);
+  return found || CUSTOM_ICONS[0];
+}
+
+function customToSectionDef(c) {
+  const icon = getCustomIcon(c.iconKey);
+  return { id: c.id, name: c.title, icon: icon.icon, iconKey: icon.key, custom: true };
 }
 
 function allSectionDefs() {
   return SECTIONS.concat(OPTIONAL_SECTIONS);
 }
 
-function getSectionDef(id) {
-  return allSectionDefs().find((s) => s.id === id) || null;
+function getSectionDef(id, job) {
+  const core = allSectionDefs().find((s) => s.id === id);
+  if (core) return core;
+  if (job) {
+    ensureJobShape(job);
+    const c = job.customSections.find((x) => x.id === id);
+    if (c) return customToSectionDef(c);
+  }
+  return null;
 }
 
-function isOptionalSectionId(id) {
+function isPresetOptionalId(id) {
   return OPTIONAL_SECTIONS.some((s) => s.id === id);
 }
 
-/** Migrate older jobs and keep section blobs in sync with optionalSectionIds. */
+/** True for preset optionals, or custom_* ids (optionally verified against a job). */
+function isOptionalSectionId(id, job) {
+  if (isPresetOptionalId(id)) return true;
+  if (typeof id === 'string' && id.startsWith('custom_')) {
+    if (!job) return true;
+    ensureJobShape(job);
+    return job.customSections.some((c) => c.id === id);
+  }
+  return false;
+}
+
+function isSectionOnJob(job, id) {
+  ensureJobShape(job);
+  if (SECTIONS.some((s) => s.id === id)) return true;
+  if (job.optionalSectionIds.includes(id)) return true;
+  return job.customSections.some((c) => c.id === id);
+}
+
+/** Migrate older jobs and keep section blobs in sync with optionalSectionIds + customSections. */
 function ensureJobShape(job) {
   if (!job) return job;
   if (!job.sections || typeof job.sections !== 'object') job.sections = {};
   if (!Array.isArray(job.optionalSectionIds)) job.optionalSectionIds = [];
-  // Dedupe + drop unknown optional ids
+  if (!Array.isArray(job.customSections)) job.customSections = [];
+  // Dedupe + drop unknown preset optional ids
   const seen = new Set();
   job.optionalSectionIds = job.optionalSectionIds.filter((id) => {
-    if (!isOptionalSectionId(id) || seen.has(id)) return false;
+    if (!isPresetOptionalId(id) || seen.has(id)) return false;
     seen.add(id);
     return true;
   });
+  // Normalize customs; drop empties; dedupe by id
+  const customSeen = new Set();
+  job.customSections = job.customSections
+    .map(normalizeCustomSection)
+    .filter((c) => {
+      if (!c || customSeen.has(c.id)) return false;
+      customSeen.add(c.id);
+      return true;
+    });
   SECTIONS.forEach((s) => {
     if (!job.sections[s.id]) job.sections[s.id] = emptySection();
   });
   job.optionalSectionIds.forEach((id) => {
     if (!job.sections[id]) job.sections[id] = emptySection();
   });
+  job.customSections.forEach((c) => {
+    if (!job.sections[c.id]) job.sections[c.id] = emptySection();
+  });
   return job;
 }
 
-/** Core 12 + selected optionals, in display order (core first, then optionals as added). */
+/** Core 12 + selected presets + custom optionals (core first, then optionals as added). */
 function getActiveSections(job) {
   ensureJobShape(job);
   const optionals = job.optionalSectionIds
     .map((id) => OPTIONAL_SECTIONS.find((s) => s.id === id))
     .filter(Boolean);
-  return SECTIONS.concat(optionals);
+  const customs = job.customSections.map(customToSectionDef);
+  return SECTIONS.concat(optionals).concat(customs);
 }
 
 function getAvailableOptionals(job) {
@@ -102,19 +180,38 @@ function getAvailableOptionals(job) {
 
 function addOptionalToJob(job, sectionId) {
   ensureJobShape(job);
-  if (!isOptionalSectionId(sectionId)) return false;
+  if (!isPresetOptionalId(sectionId)) return false;
   if (job.optionalSectionIds.includes(sectionId)) return false;
   job.optionalSectionIds.push(sectionId);
   if (!job.sections[sectionId]) job.sections[sectionId] = emptySection();
   return true;
 }
 
+/** Create a job-only custom optional system. Returns the entry or null. */
+function addCustomToJob(job, title, iconKey) {
+  ensureJobShape(job);
+  const name = String(title || '').trim();
+  if (!name) return null;
+  const icon = getCustomIcon(iconKey);
+  const id = 'custom_' + uid().replace(/^id_/, '');
+  const entry = { id, title: name, iconKey: icon.key };
+  job.customSections.push(entry);
+  job.sections[id] = emptySection();
+  return entry;
+}
+
 function removeOptionalFromJob(job, sectionId) {
   ensureJobShape(job);
-  if (!job.optionalSectionIds.includes(sectionId)) return false;
-  job.optionalSectionIds = job.optionalSectionIds.filter((id) => id !== sectionId);
-  delete job.sections[sectionId];
-  return true;
+  let removed = false;
+  if (job.optionalSectionIds.includes(sectionId)) {
+    job.optionalSectionIds = job.optionalSectionIds.filter((id) => id !== sectionId);
+    removed = true;
+  }
+  const before = job.customSections.length;
+  job.customSections = job.customSections.filter((c) => c.id !== sectionId);
+  if (job.customSections.length !== before) removed = true;
+  if (removed) delete job.sections[sectionId];
+  return removed;
 }
 
 /**
@@ -335,8 +432,8 @@ function buildSampleJob() {
   };
 
   // Leave structure, interior, insulation, appliances, garage empty → "Not recorded"
-  // Optionals (Pool/Spa, Irrigation, Outbuildings, Dock) stay OFF by default —
-  // add via "Add optional system" on the Sections screen when a property needs them.
+  // Preset optionals stay OFF by default — add via "＋ Add optional system".
+  // Job-only customs: ☰ Add custom system (name + icon).
   return job;
 }
 

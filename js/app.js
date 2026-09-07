@@ -232,8 +232,8 @@
       renderSections(job);
     } else if (view === 'section' && job) {
       ensureJobShape(job);
-      const sec = getSectionDef(currentSectionId);
-      const onJob = sec && (SECTIONS.some((s) => s.id === sec.id) || job.optionalSectionIds.includes(sec.id));
+      const sec = getSectionDef(currentSectionId, job);
+      const onJob = sec && isSectionOnJob(job, sec.id);
       if (!sec || !onJob) {
         navigate('sections');
         return;
@@ -473,7 +473,7 @@
 
     const rows = active.map((sec) => {
       const st = sectionStats(job, sec.id);
-      const optional = isOptionalSectionId(sec.id);
+      const optional = isOptionalSectionId(sec.id, job);
       let statusClass = '';
       let statusText = 'Not recorded';
       if (st.hasFindings) {
@@ -522,7 +522,7 @@
         <button type="button" class="btn btn-outline btn-sm" id="btn-add-optional" ${available.length ? '' : 'disabled'}>
           ＋ Add optional system
         </button>
-        <button type="button" class="btn-icon sections-overflow" id="btn-sections-menu" aria-label="More options" title="More">☰</button>
+        <button type="button" class="btn-icon sections-overflow" id="btn-add-custom" aria-label="Add custom system" title="Add custom system">☰</button>
       </div>
 
       <div class="sections-grid">${rows}</div>
@@ -539,33 +539,8 @@
     });
     const addBtn = document.getElementById('btn-add-optional');
     if (addBtn) addBtn.onclick = () => openOptionalPicker(job);
-    const menuBtn = document.getElementById('btn-sections-menu');
-    if (menuBtn) {
-      menuBtn.onclick = () => {
-        openModal(`
-          <div class="modal-sheet">
-            <h2>Job options</h2>
-            <button type="button" class="picker-item" id="menu-add-optional" ${available.length ? '' : 'disabled'}>
-              <span class="picker-icon">＋</span>
-              <span class="picker-info">
-                <strong>Add optional system</strong>
-                <span>Pool / Spa, Irrigation, Outbuildings, Dock…</span>
-              </span>
-            </button>
-            <div class="modal-actions">
-              <button type="button" class="btn btn-outline" id="modal-cancel">Close</button>
-            </div>
-          </div>`);
-        document.getElementById('modal-cancel').onclick = closeModal;
-        const m = document.getElementById('menu-add-optional');
-        if (m && !m.disabled) {
-          m.onclick = () => {
-            closeModal();
-            openOptionalPicker(job);
-          };
-        }
-      };
-    }
+    const customBtn = document.getElementById('btn-add-custom');
+    if (customBtn) customBtn.onclick = () => openCustomSystemModal(job);
   }
 
   function openOptionalPicker(job) {
@@ -605,7 +580,7 @@
         if (addOptionalToJob(job, id)) {
           saveStore();
           closeModal();
-          const def = getSectionDef(id);
+          const def = getSectionDef(id, job);
           toast(`Added ${def ? def.name : 'system'}`);
           render();
         }
@@ -613,10 +588,70 @@
     });
   }
 
+  function openCustomSystemModal(job) {
+    ensureJobShape(job);
+    let selectedIcon = CUSTOM_ICONS[0].key;
+    const iconCells = CUSTOM_ICONS.map(
+      (ic) => `
+        <button type="button" class="icon-pick${ic.key === selectedIcon ? ' is-selected' : ''}" data-icon-key="${ic.key}" aria-label="${escapeHtml(ic.label)}" title="${escapeHtml(ic.label)}">
+          <span aria-hidden="true">${ic.icon}</span>
+        </button>`
+    ).join('');
+    openModal(`
+      <div class="modal-sheet">
+        <h2>Add custom system</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px">
+          Name a system unique to this property (e.g. Guest house, Solar array). It appears only on this job — empty exports as <em>Not recorded</em>.
+        </p>
+        <div class="form-group">
+          <label for="custom-system-name">System name</label>
+          <input type="text" id="custom-system-name" maxlength="80" placeholder="e.g. Guest house, Solar array" autocomplete="off" />
+        </div>
+        <div class="form-group">
+          <label>Icon</label>
+          <div class="icon-pick-grid" role="listbox" aria-label="Choose an icon">${iconCells}</div>
+        </div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-primary" id="modal-add-custom">Add system</button>
+        </div>
+      </div>`);
+    document.getElementById('modal-cancel').onclick = closeModal;
+    const nameInput = document.getElementById('custom-system-name');
+    nameInput.focus();
+    $modalRoot.querySelectorAll('[data-icon-key]').forEach((el) => {
+      el.onclick = () => {
+        selectedIcon = el.getAttribute('data-icon-key');
+        $modalRoot.querySelectorAll('[data-icon-key]').forEach((b) => {
+          b.classList.toggle('is-selected', b.getAttribute('data-icon-key') === selectedIcon);
+        });
+      };
+    });
+    const submit = () => {
+      const entry = addCustomToJob(job, nameInput.value, selectedIcon);
+      if (!entry) {
+        toast('Enter a system name');
+        nameInput.focus();
+        return;
+      }
+      saveStore();
+      closeModal();
+      toast(`Added ${entry.title}`);
+      render();
+    };
+    document.getElementById('modal-add-custom').onclick = submit;
+    nameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') {
+        e.preventDefault();
+        submit();
+      }
+    });
+  }
+
   function confirmRemoveOptional(job, sectionId) {
     ensureJobShape(job);
-    const def = getSectionDef(sectionId);
-    if (!def || !job.optionalSectionIds.includes(sectionId)) return;
+    const def = getSectionDef(sectionId, job);
+    if (!def || !isSectionOnJob(job, sectionId) || !isOptionalSectionId(sectionId, job)) return;
     const st = sectionStats(job, sectionId);
     const hasContent = !st.empty;
     const findingsCount = (job.sections[sectionId] && job.sections[sectionId].findings)
@@ -751,7 +786,7 @@
       </div>
 
       ${
-        isOptionalSectionId(sec.id)
+        isOptionalSectionId(sec.id, job)
           ? `<div class="optional-section-footer">
                <span class="optional-badge">Optional system</span>
                <button type="button" class="btn btn-ghost btn-sm" id="btn-remove-optional-section">Remove from job</button>
