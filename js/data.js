@@ -650,11 +650,16 @@ function formatNominatimAddress(item) {
   const a = item.address || {};
   const street = [a.house_number, a.road].filter(Boolean).join(' ');
   const city = a.city || a.town || a.village || a.hamlet || a.municipality || '';
-  const state = a.state || '';
+  // Prefer US state abbreviation when Nominatim provides ISO3166-2-lvl4 (e.g. US-TX)
+  let state = a.state || '';
+  const iso = a['ISO3166-2-lvl4'] || a['ISO3166-2-lvl3'] || '';
+  if (typeof iso === 'string' && /^US-[A-Z]{2}$/i.test(iso)) {
+    state = iso.slice(3).toUpperCase();
+  }
   const zip = a.postcode || '';
   const parts = [street, city, state, zip].filter(Boolean);
   if (street && (city || state || zip)) {
-    // "123 Main St, City, ST 78745"
+    // US-friendly: "123 Main St, City, ST 78745"
     let line = street;
     if (city) line += ', ' + city;
     if (state) line += ', ' + state;

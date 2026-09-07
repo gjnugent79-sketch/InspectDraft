@@ -1121,14 +1121,14 @@
       if (abort) abort.abort();
       abort = new AbortController();
       const url =
-        'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' +
+        'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&countrycodes=us&limit=5&q=' +
         encodeURIComponent(q);
       try {
         const res = await fetch(url, {
           signal: abort.signal,
           headers: {
             Accept: 'application/json',
-            'Accept-Language': (navigator.language || 'en') + ',en;q=0.8',
+            'Accept-Language': 'en-US,en;q=0.8',
           },
         });
         if (!res.ok) throw new Error('nominatim ' + res.status);
