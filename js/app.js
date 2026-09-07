@@ -522,8 +522,11 @@
         <button type="button" class="btn btn-outline btn-sm" id="btn-add-optional" ${available.length ? '' : 'disabled'}>
           ＋ Add optional system
         </button>
-        <button type="button" class="btn-icon sections-overflow" id="btn-add-custom" aria-label="Add custom system" title="Add custom system">☰</button>
+        <button type="button" class="btn btn-outline btn-sm btn-add-custom" id="btn-add-custom" aria-label="Add custom system" title="Add custom system">
+          ✎ ＋ Custom
+        </button>
       </div>
+      <p class="sections-toolbar-hint">Presets · Custom name + icon</p>
 
       <div class="sections-grid">${rows}</div>
     `;

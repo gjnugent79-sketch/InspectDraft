@@ -725,11 +725,23 @@ img { max-width: 100%; display: block; }
   display: flex;
   align-items: center;
   gap: 8px;
-  margin-bottom: 12px;
+  margin-bottom: 6px;
 }
 
 .sections-toolbar .btn {
   flex: 1;
+}
+
+.btn-add-custom {
+  flex: 0 1 auto;
+  white-space: nowrap;
+}
+
+.sections-toolbar-hint {
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+  color: var(--text-dim);
+  letter-spacing: 0.01em;
 }
 
 .sections-overflow {
@@ -847,7 +859,8 @@ img { max-width: 100%; display: block; }
   background: rgba(0, 200, 83, 0.18);
 }
 
-.sections-overflow[aria-label="Add custom system"]:hover {
+.btn-add-custom:hover,
+.btn-add-custom:focus-visible {
   border-color: var(--accent, #00C853);
   color: var(--navy, #0A2540);
 }

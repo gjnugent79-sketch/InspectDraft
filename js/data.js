@@ -34,7 +34,7 @@ function emptySection() {
   return { notes: '', photos: [], findings: [] };
 }
 
-/** Icon choices for job-only custom optional systems (☰ → Add custom system). */
+/** Icon choices for job-only custom optional systems (Custom → Add custom system). */
 const CUSTOM_ICONS = [
   { key: 'house', icon: '🏠', label: 'House' },
   { key: 'pool', icon: '🏊', label: 'Pool' },
@@ -433,7 +433,7 @@ function buildSampleJob() {
 
   // Leave structure, interior, insulation, appliances, garage empty → "Not recorded"
   // Preset optionals stay OFF by default — add via "＋ Add optional system".
-  // Job-only customs: ☰ Add custom system (name + icon).
+  // Job-only customs: Custom → Add custom system (name + icon).
   return job;
 }
 
