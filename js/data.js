@@ -443,3 +443,223 @@ function defaultStore() {
     version: 1,
   };
 }
+
+/** localStorage key for user-saved comment snippets */
+const SNIPPETS_KEY = 'inspectdraft_snippets_custom';
+
+/**
+ * Pre-populated US home-inspection style observation snippets by system.
+ * Observation-oriented wording — not legal advice or code citations as mandates.
+ */
+const SNIPPET_LIBRARY = {
+  roof: [
+    { text: 'Asphalt shingles show granule loss and weathering consistent with age; remaining service life appears limited in areas observed.', severity: 'maintenance' },
+    { text: 'Lifted or missing shingle tabs noted at slope; fasteners/underlayment may be exposed to weather.', severity: 'major' },
+    { text: 'Flashing at chimney/wall intersection shows gaps, rust, or incomplete sealant; potential moisture entry point.', severity: 'major' },
+    { text: 'Gutters and/or downspouts clogged with debris or disconnected; roof drainage may not discharge clear of the foundation.', severity: 'maintenance' },
+    { text: 'Roof covering inspected from ground / edges only due to pitch or access; center areas not walked.', severity: '' },
+    { text: 'Evidence of prior repairs (patched areas / mismatched materials) observed; no active leak confirmed from limited view.', severity: 'maintenance' },
+  ],
+  exterior: [
+    { text: 'Siding/trim shows peeling finish and/or soft spots near grade; moisture exposure may continue if unfinished.', severity: 'major' },
+    { text: 'Gaps in caulk/sealant at window and door trim; weather intrusion possible at openings.', severity: 'maintenance' },
+    { text: 'Exterior grade or hardscape slopes toward the foundation in area(s) noted; surface water may concentrate at the wall.', severity: 'major' },
+    { text: 'Cracks in exterior cladding or stucco; typical shrinkage vs structural movement not fully determined from visual inspection.', severity: 'maintenance' },
+    { text: 'Fascia/soffit damage or openings that may allow pest or weather entry.', severity: 'maintenance' },
+    { text: 'Exterior hose bib drips when shut off or lacks backflow protection where expected.', severity: 'maintenance' },
+  ],
+  structure: [
+    { text: 'Visible cracks in foundation wall or slab; width/pattern noted for monitoring. Full structural analysis beyond scope of this inspection.', severity: 'major' },
+    { text: 'Wood framing members show staining, notching, or prior modification in accessible areas.', severity: 'maintenance' },
+    { text: 'Settlement or out-of-level floors observed in area(s) noted; further evaluation by a structural professional recommended if progressive.', severity: 'major' },
+    { text: 'Crawlspace or basement shows elevated moisture indicators (staining, efflorescence, musty odor) where accessed.', severity: 'major' },
+    { text: 'Support posts/piers appear out of plumb or lacking positive connection where visible.', severity: 'safety' },
+    { text: 'Limited structural view due to finishes, insulation, or stored items — observations from accessible areas only.', severity: '' },
+  ],
+  electrical: [
+    { text: 'GFCI receptacle did not trip when tested; ground-fault protection may not be functional at this outlet.', severity: 'safety' },
+    { text: 'Open knockouts or missing cover(s) at panel/junction; enclosure integrity incomplete.', severity: 'safety' },
+    { text: 'Double-tapped breaker(s) or shared neutral concerns observed at the service panel where visible.', severity: 'safety' },
+    { text: 'Smoke and/or CO detector missing, chirping, or not responding to test in area(s) noted.', severity: 'safety' },
+    { text: 'Ungrounded three-prong receptacles present; equipment grounding path not verified at those locations.', severity: 'major' },
+    { text: 'Panel directory incomplete or inaccurate; circuit identification should be updated for safety.', severity: 'maintenance' },
+    { text: 'Extension cords or temporary wiring used as permanent circuits in area(s) observed.', severity: 'safety' },
+  ],
+  plumbing: [
+    { text: 'Active drip or evidence of prior leak under sink/fixture; supply or drain components may need repair.', severity: 'major' },
+    { text: 'TPR valve discharge pipe on water heater missing, capped, or terminates improperly relative to floor/drain.', severity: 'safety' },
+    { text: 'Water heater age/condition suggests limited remaining service life; no active leak observed at time of inspection.', severity: 'maintenance' },
+    { text: 'Low flow, noisy valves, or fixture not secured; functional issue noted at location inspected.', severity: 'maintenance' },
+    { text: 'Supply piping is galvanized or mixed materials; corrosion/restriction possible over time.', severity: 'maintenance' },
+    { text: 'Main shutoff location identified / not readily accessible — confirm for emergency use.', severity: '' },
+  ],
+  hvac: [
+    { text: 'Filter dirty or overdue for replacement; airflow and indoor air quality may be affected.', severity: 'maintenance' },
+    { text: 'System operated at time of inspection; unusual noise, odor, or weak airflow noted at register(s) sampled.', severity: 'major' },
+    { text: 'Condensate drain or pan shows algae, standing water, or improper termination.', severity: 'maintenance' },
+    { text: 'Outdoor condenser coils dirty or clearance restricted by vegetation/debris.', severity: 'maintenance' },
+    { text: 'Combustion appliance flue/venting concerns (clearance, slope, termination) where visible — further evaluation advised.', severity: 'safety' },
+    { text: 'No heat/cool call possible due to outdoor temperature or thermostat setback; limited operational test performed.', severity: '' },
+  ],
+  interior: [
+    { text: 'Doors/windows bind, do not latch, or show out-of-square openings in area(s) noted.', severity: 'maintenance' },
+    { text: 'Ceiling or wall stains consistent with prior moisture; source not confirmed active at time of inspection.', severity: 'major' },
+    { text: 'Missing or loose handrail / guardrail at stairs or elevated areas.', severity: 'safety' },
+    { text: 'Floor covering damaged, loose, or uneven transitions creating trip potential.', severity: 'safety' },
+    { text: 'Interior finishes show typical wear; cosmetic items noted for buyer awareness only.', severity: 'maintenance' },
+    { text: 'Attic access restricted by stored items or insulation — partial visual inspection only.', severity: '' },
+  ],
+  insulation: [
+    { text: 'Attic insulation depth appears below current common practice in areas viewed; energy performance may be limited.', severity: 'maintenance' },
+    { text: 'Bath/kitchen exhaust does not terminate outdoors or duct is disconnected/damaged where visible.', severity: 'major' },
+    { text: 'Attic ventilation (soffit/ridge/gable) appears blocked or insufficient relative to attic size.', severity: 'maintenance' },
+    { text: 'Evidence of moisture or fungal growth on roof sheathing in attic where accessed.', severity: 'major' },
+    { text: 'Crawlspace vapor barrier missing, incomplete, or standing water present where entered.', severity: 'major' },
+  ],
+  appliances: [
+    { text: 'Appliance operated through basic cycle where accessible; unusual noise, leak, or failure to start noted.', severity: 'major' },
+    { text: 'Dishwasher drain/high loop or air gap arrangement appears improper where visible.', severity: 'maintenance' },
+    { text: 'Range anti-tip bracket not confirmed installed; tip-over risk if missing.', severity: 'safety' },
+    { text: 'Garbage disposer hums or does not operate; further evaluation/repair recommended.', severity: 'maintenance' },
+    { text: 'Built-in appliances aged; remaining life uncertain — budget for eventual replacement.', severity: 'maintenance' },
+  ],
+  garage: [
+    { text: 'Garage door opener auto-reverse / photo-eye safety features did not respond as expected when tested.', severity: 'safety' },
+    { text: 'Fire separation (door/drywall) between garage and living space incomplete or damaged where visible.', severity: 'safety' },
+    { text: 'Vehicle door springs, cables, or tracks show wear; professional service recommended before failure.', severity: 'major' },
+    { text: 'Floor drain or slab cracks with moisture evidence in garage.', severity: 'maintenance' },
+    { text: 'Gas-fired appliance in garage lacks adequate elevation/protection from vehicle impact where required by common practice.', severity: 'safety' },
+  ],
+  grounds: [
+    { text: 'Grading and/or drainage directs surface water toward the foundation in area(s) noted.', severity: 'major' },
+    { text: 'Trees/vegetation in contact with roof or siding; abrasion and moisture retention possible.', severity: 'maintenance' },
+    { text: 'Walkways/driveway have trip hazards, settled sections, or significant cracking.', severity: 'safety' },
+    { text: 'Fence/gate hardware damaged or gates do not latch securely.', severity: 'maintenance' },
+    { text: 'Retaining wall shows lean, cracks, or drainage weep concerns where visible.', severity: 'major' },
+  ],
+  limitations: [
+    { text: 'Area not inspected due to lack of access, locked spaces, or unsafe conditions at time of visit.', severity: '' },
+    { text: 'Systems shut down, winterized, or utilities off — operational testing limited or not performed.', severity: '' },
+    { text: 'Inspection is visual and non-invasive; concealed conditions may exist behind finishes.', severity: '' },
+    { text: 'Weather / lighting / occupancy limited full evaluation of exterior or roof surfaces.', severity: '' },
+  ],
+  pool_spa: [
+    { text: 'Pool/spa barrier, gate self-close/self-latch, or alarms do not appear to meet common safety expectations where checked.', severity: 'safety' },
+    { text: 'Equipment (pump/filter/heater) leaked, noisy, or did not operate during limited test.', severity: 'major' },
+    { text: 'Visible cracks, staining, or deterioration at shell/deck; further evaluation by a pool specialist recommended.', severity: 'major' },
+    { text: 'Electrical bonding/equipotential grid and GFCI protection not fully verified — specialist evaluation advised.', severity: 'safety' },
+  ],
+  irrigation: [
+    { text: 'Sprinkler heads broken, misaligned, or spraying structure/hardscape excessively.', severity: 'maintenance' },
+    { text: 'Backflow prevention device missing, damaged, or due for testing where visible.', severity: 'major' },
+    { text: 'Controller/zones not fully tested; seasonal or manual operation only at time of inspection.', severity: '' },
+  ],
+  outbuildings: [
+    { text: 'Detached structure shows weather damage, settlement, or unsafe steps/landing.', severity: 'major' },
+    { text: 'Electrical in outbuilding appears improvised or unprotected; safety evaluation recommended.', severity: 'safety' },
+    { text: 'Outbuilding inspected visually only; utilities and finishes limited in scope.', severity: '' },
+  ],
+  dock: [
+    { text: 'Dock/deck boards, connections, or pilings show rot, movement, or missing fasteners where accessible.', severity: 'safety' },
+    { text: 'Shoreline / waterfront structure access limited by water level or safety; partial inspection only.', severity: '' },
+  ],
+  general: [
+    { text: 'Condition noted for further evaluation by a qualified specialist in this trade.', severity: 'major' },
+    { text: 'Monitor condition and repair as needed as part of routine home maintenance.', severity: 'maintenance' },
+    { text: 'Safety concern — recommend prompt attention by a qualified professional.', severity: 'safety' },
+  ],
+};
+
+const SEVERITY_OPTIONS = [
+  { id: '', label: 'None' },
+  { id: 'safety', label: 'Safety' },
+  { id: 'major', label: 'Major' },
+  { id: 'maintenance', label: 'Maintenance' },
+];
+
+function severityLabel(id) {
+  const s = SEVERITY_OPTIONS.find((x) => x.id === id);
+  return s ? s.label : '';
+}
+
+function loadCustomSnippets() {
+  try {
+    const raw = localStorage.getItem(SNIPPETS_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .filter((s) => s && typeof s.text === 'string' && s.text.trim())
+      .map((s) => ({
+        id: s.id || uid(),
+        category: String(s.category || 'general'),
+        text: String(s.text).trim(),
+        severity: ['safety', 'major', 'maintenance'].includes(s.severity) ? s.severity : '',
+        custom: true,
+      }));
+  } catch (_) {
+    return [];
+  }
+}
+
+function saveCustomSnippets(list) {
+  localStorage.setItem(SNIPPETS_KEY, JSON.stringify(list || []));
+}
+
+function addCustomSnippet(category, text, severity) {
+  const t = String(text || '').trim();
+  if (!t) return null;
+  const list = loadCustomSnippets();
+  const entry = {
+    id: uid(),
+    category: category || 'general',
+    text: t,
+    severity: ['safety', 'major', 'maintenance'].includes(severity) ? severity : '',
+    custom: true,
+  };
+  list.unshift(entry);
+  saveCustomSnippets(list.slice(0, 80));
+  return entry;
+}
+
+function deleteCustomSnippet(id) {
+  const list = loadCustomSnippets().filter((s) => s.id !== id);
+  saveCustomSnippets(list);
+  return list;
+}
+
+/** Built-in + custom snippets for a section id (falls back to general). */
+function getSnippetsForSection(sectionId) {
+  let key = sectionId;
+  if (typeof key === 'string' && key.startsWith('custom_')) key = 'general';
+  const builtin = (SNIPPET_LIBRARY[key] || SNIPPET_LIBRARY.general || []).map((s, i) => ({
+    id: 'b_' + key + '_' + i,
+    category: key,
+    text: s.text,
+    severity: s.severity || '',
+    custom: false,
+  }));
+  const custom = loadCustomSnippets().filter(
+    (s) => s.category === key || s.category === 'general' || s.category === sectionId
+  );
+  return custom.concat(builtin);
+}
+
+function formatNominatimAddress(item) {
+  if (!item) return '';
+  const a = item.address || {};
+  const street = [a.house_number, a.road].filter(Boolean).join(' ');
+  const city = a.city || a.town || a.village || a.hamlet || a.municipality || '';
+  const state = a.state || '';
+  const zip = a.postcode || '';
+  const parts = [street, city, state, zip].filter(Boolean);
+  if (street && (city || state || zip)) {
+    // "123 Main St, City, ST 78745"
+    let line = street;
+    if (city) line += ', ' + city;
+    if (state) line += ', ' + state;
+    if (zip) line += (state ? ' ' : ', ') + zip;
+    return line;
+  }
+  return item.display_name || parts.join(', ');
+}

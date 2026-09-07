@@ -26,19 +26,22 @@ No build step. Vanilla HTML / CSS / JS. Data persists in `localStorage`.
 ## What works
 
 1. **Landing** — headline, benefits, screenshot strip, CTAs into the app
-2. **Jobs list** — create / open / delete jobs (address, client, date, inspector)
+2. **Jobs list** — create / open / delete jobs (address, client, date, inspector). Edit details from a job’s Sections header.
 3. **Seeded sample job** — Austin address with Roof, Electrical, Plumbing, HVAC, Exterior, Grounds, Limitations already filled so the demo works immediately
 4. **12 core sections** — Roof, Exterior, Structure, Electrical, Plumbing, HVAC, Interior, Insulation/Ventilation, Appliances, Garage, Grounds, Limitations / Not Inspected (default template)
 5. **Opt-in optional systems** — Pool / Spa, Irrigation / Sprinklers, Outbuildings / Detached structures, Dock / Waterfront. Add via **＋ Add optional system** on Sections (preset picker). Not added → omitted from list and PDF. Added but empty → Not recorded (same as core). Removable with confirm. Sample job leaves optionals off.
 6. **Custom optional systems** — ☰ (**Add custom system**) opens a name + icon picker (house, pool, solar, tree, fence, flame, water, wrench, camera, bolt, shield, warehouse). Creates a job-only optional (id, title, iconKey in localStorage). Same omit / Not recorded / removable rules as presets. Does not alter the core 12.
-7. **Per section** — text notes, photos (file / camera), editable findings; **Structure notes** is the hero action
-8. **Empty sections** — hint: “Walk a system, add notes, structure, export.”
-9. **Structure notes (stub AI)** — client-side heuristics split notes into `{observation, recommendation}`; labeled as stub AI; confirms before replacing findings
-10. **Edit / delete findings** before export
-11. **Preview + Export** — print-friendly HTML report; browser Print → Save as PDF
-12. **Disclaimer footer** — *“Draft for professional review. AI-assisted structuring — verify all findings.”*
-13. **Empty sections** → **Not recorded** (blank ≠ pass)
-14. **Light field UI** (navy chrome) with optional dark toggle; large tap targets, mobile-first layout
+7. **Per section** — text notes, photos, editable findings; **Structure notes** is the hero action
+8. **Address autocomplete** — New/Edit job address suggests OpenStreetMap Nominatim results (debounced, no API key). Free text still works. Attribution: © OpenStreetMap.
+9. **Comment library** — **Library** on field notes or finding editor inserts US-inspection observation snippets by system. Save current text as a custom snippet (localStorage). Optional Safety / Major / Maintenance tags on findings.
+10. **Photo markup** — tap a photo (or after a single capture) to draw circle / arrow / pen, then Undo or Done. Marked-up JPEG replaces the photo.
+11. **Camera vs Photo library** — section capture has two actions so iPhone Safari is not camera-only: **Camera** (`capture="environment"`) and **Photo library** (no `capture`).
+12. **Empty sections** — hint: “Walk a system, add notes, structure, export.” Empty → **Not recorded** (blank ≠ pass)
+13. **Structure notes (stub AI)** — client-side heuristics split notes into `{observation, recommendation}`; labeled as stub AI; confirms before replacing findings
+14. **Edit / delete findings** before export
+15. **Preview + Export** — print-friendly HTML report; browser Print → Save as PDF
+16. **Disclaimer footer** — *“Draft for professional review. AI-assisted structuring — verify all findings.”*
+17. **Light field UI** (navy chrome) with optional dark toggle; large tap targets, mobile-first layout
 
 ## Out of scope (by design)
 

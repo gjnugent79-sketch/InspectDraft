@@ -8,6 +8,7 @@
   let currentJobId = null;
   let currentSectionId = null;
   let editingFindingId = null;
+  let editingJobId = null; // when set, job-form edits existing job
 
   const $main = document.getElementById('main');
   const $header = document.getElementById('app-header');
@@ -79,6 +80,8 @@
     if (opts && opts.jobId) currentJobId = opts.jobId;
     if (opts && opts.sectionId) currentSectionId = opts.sectionId;
     if (opts && opts.sectionId === null) currentSectionId = null;
+    if (opts && opts.editingJobId !== undefined) editingJobId = opts.editingJobId;
+    else if (next !== 'job-form') editingJobId = null;
     editingFindingId = null;
     closeModal();
     render();
@@ -223,7 +226,7 @@
       $headerSub.textContent = 'INSPECT / CAPTURE / REPORT';
       renderJobs();
     } else if (view === 'job-form') {
-      $headerTitle.textContent = 'New Job';
+      $headerTitle.textContent = editingJobId ? 'Edit Job' : 'New Job';
       $headerSub.textContent = 'Inspection details';
       renderJobForm();
     } else if (view === 'sections' && job) {
@@ -419,45 +422,70 @@
   }
 
   function renderJobForm() {
+    const editing = editingJobId ? getJob(editingJobId) : null;
     const today = new Date().toISOString().slice(0, 10);
+    const addr = editing ? editing.address : '';
+    const client = editing ? editing.client : '';
+    const date = editing ? editing.date : today;
+    const inspector = editing ? editing.inspector : '';
     $main.innerHTML = `
       <div class="page-intro">
-        <h2>New inspection job</h2>
+        <h2>${editing ? 'Edit inspection job' : 'New inspection job'}</h2>
         <p>Saved on this device only (localStorage).</p>
       </div>
       <form id="job-form">
-        <div class="form-group">
+        <div class="form-group address-autocomplete">
           <label for="f-address">Property address</label>
-          <input id="f-address" name="address" required placeholder="123 Main St, City, ST 00000" autocomplete="street-address" />
+          <div class="ac-wrap">
+            <input id="f-address" name="address" required placeholder="Start typing an address…" autocomplete="off" value="${escapeHtml(addr)}" />
+            <ul id="ac-list" class="ac-list hidden" role="listbox" aria-label="Address suggestions"></ul>
+          </div>
+          <p class="form-hint ac-attrib">Suggestions via Nominatim · <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap</a> — free text always works</p>
         </div>
         <div class="form-group">
           <label for="f-client">Client name</label>
-          <input id="f-client" name="client" placeholder="Client or buyer name" />
+          <input id="f-client" name="client" placeholder="Client or buyer name" value="${escapeHtml(client)}" />
         </div>
         <div class="form-group">
           <label for="f-date">Inspection date</label>
-          <input id="f-date" name="date" type="date" value="${today}" required />
+          <input id="f-date" name="date" type="date" value="${escapeHtml(date)}" required />
         </div>
         <div class="form-group">
           <label for="f-inspector">Inspector name</label>
-          <input id="f-inspector" name="inspector" placeholder="Your name" />
+          <input id="f-inspector" name="inspector" placeholder="Your name" value="${escapeHtml(inspector)}" />
         </div>
         <div class="btn-row">
           <button type="button" class="btn btn-outline" id="btn-cancel-form">Cancel</button>
-          <button type="submit" class="btn btn-primary">Create job</button>
+          <button type="submit" class="btn btn-primary">${editing ? 'Save changes' : 'Create job'}</button>
         </div>
       </form>
     `;
-    document.getElementById('btn-cancel-form').onclick = () => navigate('jobs');
+    document.getElementById('btn-cancel-form').onclick = () => {
+      if (editing) navigate('sections', { jobId: editing.id });
+      else navigate('jobs');
+    };
+    wireAddressAutocomplete(document.getElementById('f-address'), document.getElementById('ac-list'));
     document.getElementById('job-form').onsubmit = (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
-      const job = createJob({
+      const meta = {
         address: (fd.get('address') || '').trim(),
         client: (fd.get('client') || '').trim(),
         date: fd.get('date'),
         inspector: (fd.get('inspector') || '').trim(),
-      });
+      };
+      if (editing) {
+        editing.address = meta.address;
+        editing.client = meta.client;
+        editing.date = meta.date;
+        editing.inspector = meta.inspector;
+        saveStore();
+        toast('Job updated');
+        editingJobId = null;
+        navigate('sections', { jobId: editing.id });
+        return;
+      }
+      const job = createJob(meta);
       store.jobs.unshift(job);
       saveStore();
       toast('Job created');
@@ -516,6 +544,7 @@
         <div class="progress-label" style="margin-top:12px">${prog.filled} of ${prog.total} systems have notes or findings</div>
         <div class="progress-bar"><div class="progress-fill" style="width:${prog.pct}%"></div></div>
         <p style="font-size:0.75rem;color:var(--text-dim)">Empty sections export as <strong style="color:var(--text-muted)">Not recorded</strong> — blank does not mean pass. Optional systems appear only after you add them.</p>
+        <button type="button" class="btn btn-ghost btn-sm" id="btn-edit-job" style="margin-top:10px">✎ Edit job details</button>
       </div>
 
       <div class="sections-toolbar">
@@ -544,6 +573,10 @@
     if (addBtn) addBtn.onclick = () => openOptionalPicker(job);
     const customBtn = document.getElementById('btn-add-custom');
     if (customBtn) customBtn.onclick = () => openCustomSystemModal(job);
+    const editJobBtn = document.getElementById('btn-edit-job');
+    if (editJobBtn) {
+      editJobBtn.onclick = () => navigate('job-form', { editingJobId: job.id, jobId: job.id });
+    }
   }
 
   function openOptionalPicker(job) {
@@ -700,15 +733,28 @@
         : data.findings
             .map((f) => {
               if (editingFindingId === f.id) {
+                const sev = f.severity || '';
                 return `
                   <div class="finding-card editing" data-finding="${f.id}">
                     <div class="form-group">
                       <label>Observation</label>
                       <textarea id="edit-obs" rows="3">${escapeHtml(f.observation)}</textarea>
+                      <div class="snippet-toolbar">
+                        <button type="button" class="btn btn-outline btn-sm" data-lib-finding="${f.id}">📚 Library</button>
+                      </div>
                     </div>
                     <div class="form-group">
                       <label>Recommendation</label>
                       <textarea id="edit-rec" rows="2" placeholder="Optional">${escapeHtml(f.recommendation)}</textarea>
+                    </div>
+                    <div class="form-group">
+                      <label for="edit-sev">Severity <span class="form-hint-inline">(optional)</span></label>
+                      <select id="edit-sev">
+                        <option value="" ${sev === '' ? 'selected' : ''}>None</option>
+                        <option value="safety" ${sev === 'safety' ? 'selected' : ''}>Safety</option>
+                        <option value="major" ${sev === 'major' ? 'selected' : ''}>Major</option>
+                        <option value="maintenance" ${sev === 'maintenance' ? 'selected' : ''}>Maintenance</option>
+                      </select>
                     </div>
                     <div class="finding-actions">
                       <button type="button" class="btn btn-primary btn-sm" data-save-finding="${f.id}">Save</button>
@@ -716,9 +762,12 @@
                     </div>
                   </div>`;
               }
+              const sevBadge = f.severity
+                ? `<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span>`
+                : '';
               return `
                 <div class="finding-card" data-finding="${f.id}">
-                  <div class="finding-label">Observation</div>
+                  <div class="finding-label">Observation ${sevBadge}</div>
                   <div class="finding-obs">${escapeHtml(f.observation)}</div>
                   ${
                     f.recommendation
@@ -739,7 +788,8 @@
             .map(
               (p, i) => `
             <div class="photo-thumb">
-              <img src="${p.dataUrl}" alt="Photo ${i + 1}" />
+              <img src="${p.dataUrl}" alt="Photo ${i + 1}" data-markup-photo="${i}" title="Tap to mark up" />
+              <button type="button" class="btn-ghost btn-sm photo-markup-btn" data-markup-photo="${i}" title="Mark up">✎</button>
               <button type="button" class="photo-remove" data-remove-photo="${i}" aria-label="Remove">×</button>
             </div>`
             )
@@ -761,17 +811,25 @@
 
       <div class="notes-area">
         <div class="form-group">
-          <label for="section-notes">Field notes</label>
+          <div class="label-row">
+            <label for="section-notes">Field notes</label>
+            <button type="button" class="btn btn-outline btn-sm" id="btn-notes-library">📚 Library</button>
+          </div>
           <textarea id="section-notes" placeholder="Dictate or type observations for ${escapeHtml(sec.name)}…">${escapeHtml(data.notes)}</textarea>
-          <p class="form-hint">Tip: separate findings with blank lines or bullets. Use “recommend…” to split observation / recommendation.</p>
+          <p class="form-hint">Tip: separate findings with blank lines or bullets. Use “recommend…” to split observation / recommendation. Library inserts observation snippets.</p>
         </div>
       </div>
 
       <div class="photo-zone" id="photo-zone">
-        <input type="file" id="photo-input" accept="image/*" capture="environment" multiple />
+        <input type="file" id="photo-input-camera" accept="image/*" capture="environment" />
+        <input type="file" id="photo-input-library" accept="image/*" multiple />
         <div class="photo-zone-label">
-          <strong>＋ Add photos</strong>
-          Tap to choose files or use camera on mobile
+          <strong>Add photos</strong>
+          Camera or existing pictures — tap a thumbnail to mark up
+        </div>
+        <div class="photo-add-actions">
+          <button type="button" class="btn btn-navy btn-sm" id="btn-photo-camera">📷 Camera</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-photo-library">🖼 Photo library</button>
         </div>
         ${photosHtml}
       </div>
@@ -849,9 +907,51 @@
       };
     };
 
+    const notesLibBtn = document.getElementById('btn-notes-library');
+    if (notesLibBtn) {
+      notesLibBtn.onclick = () => {
+        openSnippetLibrary(sec.id, {
+          mode: 'notes',
+          currentText: notesEl.value,
+          onInsert: (snippet) => {
+            const cur = notesEl.value;
+            const sep = cur && !cur.endsWith('\n') ? '\n\n' : (cur ? '\n' : '');
+            notesEl.value = cur + sep + snippet.text;
+            data.notes = notesEl.value;
+            saveStore();
+            toast('Snippet added to notes');
+          },
+        });
+      };
+    }
+
+    $main.querySelectorAll('[data-lib-finding]').forEach((el) => {
+      el.onclick = () => {
+        const id = el.getAttribute('data-lib-finding');
+        const f = data.findings.find((x) => x.id === id);
+        if (!f) return;
+        openSnippetLibrary(sec.id, {
+          mode: 'finding',
+          currentText: (document.getElementById('edit-obs') || {}).value || f.observation || '',
+          onInsert: (snippet) => {
+            const obs = document.getElementById('edit-obs');
+            if (obs) {
+              const cur = obs.value.trim();
+              obs.value = cur ? cur + ' ' + snippet.text : snippet.text;
+            }
+            if (snippet.severity) {
+              const sev = document.getElementById('edit-sev');
+              if (sev && !sev.value) sev.value = snippet.severity;
+            }
+            toast('Snippet inserted');
+          },
+        });
+      };
+    });
+
     document.getElementById('btn-add-finding').onclick = () => {
       data.notes = notesEl.value;
-      const f = { id: uid(), observation: '', recommendation: '' };
+      const f = { id: uid(), observation: '', recommendation: '', severity: '' };
       data.findings.push(f);
       editingFindingId = f.id;
       saveStore();
@@ -879,6 +979,8 @@
         if (!f) return;
         f.observation = document.getElementById('edit-obs').value.trim();
         f.recommendation = document.getElementById('edit-rec').value.trim();
+        const sevEl = document.getElementById('edit-sev');
+        f.severity = sevEl ? (sevEl.value || '') : (f.severity || '');
         if (!f.observation) {
           toast('Observation required');
           return;
@@ -899,28 +1001,61 @@
       };
     });
 
-    const photoZone = document.getElementById('photo-zone');
-    const photoInput = document.getElementById('photo-input');
-    photoZone.addEventListener('click', (e) => {
-      if (e.target.closest('.photo-remove')) return;
-      photoInput.click();
-    });
-    photoInput.addEventListener('change', async () => {
-      const files = Array.from(photoInput.files || []);
+    async function addPhotosFromInput(input) {
+      const files = Array.from(input.files || []);
+      input.value = '';
       if (!files.length) return;
       toast('Adding photos…');
+      const startLen = data.photos.length;
       for (const file of files.slice(0, 8)) {
         try {
           const raw = await readFileAsDataURL(file);
           const compressed = await compressImage(raw);
-          data.photos.push({ id: uid(), dataUrl: compressed, name: file.name });
+          data.photos.push({ id: uid(), dataUrl: compressed, name: file.name || 'photo' });
         } catch (_) {}
       }
-      photoInput.value = '';
       saveStore();
-      toast('Photos added');
-      render();
-    });
+      const added = data.photos.length - startLen;
+      if (!added) {
+        toast('Could not add photos');
+        return;
+      }
+      // Single add (typical camera): open markup immediately. Multi library pick: stay on grid.
+      if (added === 1) {
+        const photo = data.photos[data.photos.length - 1];
+        render();
+        openPhotoMarkup(photo, (newUrl) => {
+          photo.dataUrl = newUrl;
+          saveStore();
+          toast('Markup saved');
+          render();
+        });
+      } else {
+        toast('Photos added — tap a photo to mark up');
+        render();
+      }
+    }
+
+    const camInput = document.getElementById('photo-input-camera');
+    const libInput = document.getElementById('photo-input-library');
+    const camBtn = document.getElementById('btn-photo-camera');
+    const libBtn = document.getElementById('btn-photo-library');
+    if (camBtn && camInput) {
+      camBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        camInput.click();
+      };
+      camInput.addEventListener('change', () => addPhotosFromInput(camInput));
+    }
+    if (libBtn && libInput) {
+      libBtn.onclick = (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        libInput.click();
+      };
+      libInput.addEventListener('change', () => addPhotosFromInput(libInput));
+    }
     $main.querySelectorAll('[data-remove-photo]').forEach((el) => {
       el.onclick = (e) => {
         e.stopPropagation();
@@ -930,6 +1065,365 @@
         render();
       };
     });
+    $main.querySelectorAll('[data-markup-photo]').forEach((el) => {
+      el.onclick = (e) => {
+        e.stopPropagation();
+        const i = parseInt(el.getAttribute('data-markup-photo'), 10);
+        const photo = data.photos[i];
+        if (!photo) return;
+        openPhotoMarkup(photo, (newUrl) => {
+          photo.dataUrl = newUrl;
+          saveStore();
+          toast('Markup saved');
+          render();
+        });
+      };
+    });
+  }
+
+  // ——— Address autocomplete (Nominatim / OSM) ———
+  function wireAddressAutocomplete(input, listEl) {
+    if (!input || !listEl) return;
+    let timer = null;
+    let abort = null;
+    let items = [];
+
+    function hideList() {
+      listEl.classList.add('hidden');
+      listEl.innerHTML = '';
+    }
+
+    function renderList(results) {
+      items = results;
+      if (!results.length) {
+        hideList();
+        return;
+      }
+      listEl.innerHTML = results
+        .map((r, i) => {
+          const label = formatNominatimAddress(r);
+          return `<li class="ac-item" role="option" data-ac-i="${i}">${escapeHtml(label)}</li>`;
+        })
+        .join('');
+      listEl.classList.remove('hidden');
+      listEl.querySelectorAll('[data-ac-i]').forEach((el) => {
+        el.onmousedown = (ev) => ev.preventDefault();
+        el.onclick = () => {
+          const r = items[parseInt(el.getAttribute('data-ac-i'), 10)];
+          if (!r) return;
+          input.value = formatNominatimAddress(r);
+          hideList();
+        };
+      });
+    }
+
+    async function search(q) {
+      if (abort) abort.abort();
+      abort = new AbortController();
+      const url =
+        'https://nominatim.openstreetmap.org/search?format=json&addressdetails=1&limit=5&q=' +
+        encodeURIComponent(q);
+      try {
+        const res = await fetch(url, {
+          signal: abort.signal,
+          headers: {
+            Accept: 'application/json',
+            'Accept-Language': (navigator.language || 'en') + ',en;q=0.8',
+          },
+        });
+        if (!res.ok) throw new Error('nominatim ' + res.status);
+        const json = await res.json();
+        if (input.value.trim() !== q) return;
+        renderList(Array.isArray(json) ? json : []);
+      } catch (err) {
+        if (err && err.name === 'AbortError') return;
+        hideList();
+        toast(navigator.onLine === false ? 'Address search offline — keep typing' : 'Address search unavailable — keep typing');
+      }
+    }
+
+    input.addEventListener('input', () => {
+      const q = input.value.trim();
+      clearTimeout(timer);
+      if (q.length < 3) {
+        hideList();
+        return;
+      }
+      timer = setTimeout(() => search(q), 350);
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') hideList();
+    });
+    input.addEventListener('blur', () => {
+      setTimeout(hideList, 200);
+    });
+  }
+
+  // ——— Comment / defect snippet library ———
+  function openSnippetLibrary(sectionId, opts) {
+    opts = opts || {};
+    const job = currentJob();
+    const def = getSectionDef(sectionId, job);
+    const catName = def ? def.name : 'General';
+
+    function paint() {
+      const snippets = getSnippetsForSection(sectionId);
+      const items = snippets.length
+        ? snippets
+            .map((s) => {
+              const sev = s.severity
+                ? `<span class="sev-badge sev-${escapeHtml(s.severity)}">${escapeHtml(severityLabel(s.severity))}</span>`
+                : '';
+              const del = s.custom
+                ? `<button type="button" class="btn-icon snippet-del" data-del-snip="${s.id}" aria-label="Delete saved snippet">×</button>`
+                : '';
+              const tag = s.custom ? `<span class="snippet-custom-tag">Saved</span>` : '';
+              return `
+                <div class="snippet-item">
+                  <button type="button" class="snippet-pick" data-snip-id="${s.id}">
+                    <span class="snippet-text">${escapeHtml(s.text)}</span>
+                    <span class="snippet-meta">${tag}${sev}</span>
+                  </button>
+                  ${del}
+                </div>`;
+            })
+            .join('')
+        : '<p class="form-hint">No snippets for this system yet.</p>';
+
+      const canSave = !!(opts.currentText && String(opts.currentText).trim());
+      $modalRoot.innerHTML = `
+        <div class="modal-sheet snippet-sheet">
+          <h2>Comment library</h2>
+          <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px">
+            ${escapeHtml(catName)} — observation-oriented wording, not legal advice. Tap a snippet to insert.
+          </p>
+          <div class="snippet-list">${items}</div>
+          <div class="modal-actions snippet-actions">
+            <button type="button" class="btn btn-outline" id="modal-cancel">Close</button>
+            <button type="button" class="btn btn-navy" id="btn-save-snippet" ${canSave ? '' : 'disabled'}>Save current as snippet</button>
+          </div>
+        </div>`;
+      $modalRoot.classList.remove('hidden');
+      $modalRoot.onclick = (e) => {
+        if (e.target === $modalRoot) closeModal();
+      };
+      document.getElementById('modal-cancel').onclick = closeModal;
+      $modalRoot.querySelectorAll('[data-snip-id]').forEach((el) => {
+        el.onclick = () => {
+          const id = el.getAttribute('data-snip-id');
+          const snip = getSnippetsForSection(sectionId).find((s) => s.id === id);
+          if (!snip) return;
+          closeModal();
+          if (opts.onInsert) opts.onInsert(snip);
+        };
+      });
+      $modalRoot.querySelectorAll('[data-del-snip]').forEach((el) => {
+        el.onclick = (e) => {
+          e.stopPropagation();
+          deleteCustomSnippet(el.getAttribute('data-del-snip'));
+          toast('Snippet removed');
+          paint();
+        };
+      });
+      const saveBtn = document.getElementById('btn-save-snippet');
+      if (saveBtn) {
+        saveBtn.onclick = () => {
+          const text = String(opts.currentText || '').trim();
+          if (!text) {
+            toast('Type notes first');
+            return;
+          }
+          addCustomSnippet(sectionId, text, '');
+          toast('Snippet saved on this device');
+          paint();
+        };
+      }
+    }
+
+    paint();
+  }
+
+  // ——— Photo markup (circle / arrow / pen on canvas) ———
+  function openPhotoMarkup(photo, onDone) {
+    if (!photo || !photo.dataUrl) return;
+    openModal(`
+      <div class="modal-sheet markup-sheet">
+        <h2>Mark up photo</h2>
+        <p class="form-hint">Circle, arrow, or free pen in orange. Undo if needed. Done writes back over the photo.</p>
+        <div class="markup-tools" role="toolbar" aria-label="Markup tools">
+          <button type="button" class="btn btn-navy btn-sm markup-tool is-active" data-tool="circle">○ Circle</button>
+          <button type="button" class="btn btn-outline btn-sm markup-tool" data-tool="arrow">↗ Arrow</button>
+          <button type="button" class="btn btn-outline btn-sm markup-tool" data-tool="pen">✎ Pen</button>
+        </div>
+        <div class="markup-canvas-wrap">
+          <canvas id="markup-canvas"></canvas>
+        </div>
+        <div class="modal-actions markup-actions">
+          <button type="button" class="btn btn-outline" id="markup-cancel">Cancel</button>
+          <button type="button" class="btn btn-ghost" id="markup-undo">Undo</button>
+          <button type="button" class="btn btn-primary" id="markup-done">Done</button>
+        </div>
+      </div>`);
+    $modalRoot.onclick = null;
+
+    const canvas = document.getElementById('markup-canvas');
+    const ctx = canvas.getContext('2d');
+    const ink = '#FF4D00';
+    const strokes = [];
+    let tool = 'circle';
+    let draft = null;
+    let drawing = false;
+    const img = new Image();
+
+    function setTool(next) {
+      tool = next;
+      $modalRoot.querySelectorAll('.markup-tool').forEach((b) => {
+        const on = b.getAttribute('data-tool') === tool;
+        b.classList.toggle('is-active', on);
+        b.classList.toggle('btn-navy', on);
+        b.classList.toggle('btn-outline', !on);
+      });
+    }
+
+    $modalRoot.querySelectorAll('.markup-tool').forEach((b) => {
+      b.onclick = () => setTool(b.getAttribute('data-tool'));
+    });
+
+    function fit() {
+      const wrap = canvas.parentElement;
+      const maxW = Math.max(240, wrap.clientWidth || 320);
+      const maxH = Math.min(window.innerHeight * 0.48, 520);
+      let w = img.naturalWidth || img.width;
+      let h = img.naturalHeight || img.height;
+      if (!w || !h) return;
+      const scale = Math.min(maxW / w, maxH / h, 1);
+      canvas.width = Math.max(1, Math.round(w * scale));
+      canvas.height = Math.max(1, Math.round(h * scale));
+      redraw();
+    }
+
+    function redraw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+      strokes.forEach(drawStroke);
+      if (draft) drawStroke(draft);
+    }
+
+    function drawStroke(s) {
+      ctx.save();
+      ctx.strokeStyle = ink;
+      ctx.fillStyle = ink;
+      ctx.lineWidth = s.type === 'pen' ? 4 : 5;
+      ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
+      if (s.type === 'circle') {
+        ctx.beginPath();
+        ctx.arc(s.cx, s.cy, Math.max(6, s.r), 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (s.type === 'arrow') {
+        drawArrow(s.x1, s.y1, s.x2, s.y2);
+      } else if (s.type === 'pen' && s.points && s.points.length) {
+        ctx.beginPath();
+        ctx.moveTo(s.points[0].x, s.points[0].y);
+        for (let i = 1; i < s.points.length; i++) ctx.lineTo(s.points[i].x, s.points[i].y);
+        ctx.stroke();
+      }
+      ctx.restore();
+    }
+
+    function drawArrow(x1, y1, x2, y2) {
+      const dx = x2 - x1;
+      const dy = y2 - y1;
+      const len = Math.hypot(dx, dy) || 1;
+      const ux = dx / len;
+      const uy = dy / len;
+      const head = Math.min(22, Math.max(12, len * 0.28));
+      ctx.beginPath();
+      ctx.moveTo(x1, y1);
+      ctx.lineTo(x2, y2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(x2, y2);
+      ctx.lineTo(x2 - ux * head - uy * head * 0.45, y2 - uy * head + ux * head * 0.45);
+      ctx.lineTo(x2 - ux * head + uy * head * 0.45, y2 - uy * head - ux * head * 0.45);
+      ctx.closePath();
+      ctx.fill();
+    }
+
+    function pos(e) {
+      const r = canvas.getBoundingClientRect();
+      const src = e.touches && e.touches[0] ? e.touches[0] : e;
+      const x = ((src.clientX - r.left) / r.width) * canvas.width;
+      const y = ((src.clientY - r.top) / r.height) * canvas.height;
+      return { x: x, y: y };
+    }
+
+    function onDown(e) {
+      e.preventDefault();
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      drawing = true;
+      const p = pos(e);
+      if (tool === 'circle') draft = { type: 'circle', cx: p.x, cy: p.y, r: 6 };
+      else if (tool === 'arrow') draft = { type: 'arrow', x1: p.x, y1: p.y, x2: p.x, y2: p.y };
+      else draft = { type: 'pen', points: [p] };
+      redraw();
+    }
+
+    function onMove(e) {
+      if (!drawing || !draft) return;
+      e.preventDefault();
+      const p = pos(e);
+      if (draft.type === 'circle') {
+        draft.r = Math.max(6, Math.hypot(p.x - draft.cx, p.y - draft.cy));
+      } else if (draft.type === 'arrow') {
+        draft.x2 = p.x;
+        draft.y2 = p.y;
+      } else {
+        draft.points.push(p);
+      }
+      redraw();
+    }
+
+    function onUp(e) {
+      if (!drawing) return;
+      e.preventDefault();
+      drawing = false;
+      if (draft) strokes.push(draft);
+      draft = null;
+      redraw();
+    }
+
+    canvas.addEventListener('pointerdown', onDown);
+    canvas.addEventListener('pointermove', onMove);
+    canvas.addEventListener('pointerup', onUp);
+    canvas.addEventListener('pointercancel', onUp);
+    canvas.addEventListener('pointerleave', (e) => {
+      if (drawing) onUp(e);
+    });
+    try {
+      canvas.style.touchAction = 'none';
+    } catch (_) {}
+
+    img.onload = fit;
+    img.onerror = () => toast('Could not load photo for markup');
+    img.src = photo.dataUrl;
+
+    document.getElementById('markup-cancel').onclick = () => {
+      closeModal();
+    };
+    document.getElementById('markup-undo').onclick = () => {
+      if (draft) draft = null;
+      else strokes.pop();
+      redraw();
+    };
+    document.getElementById('markup-done').onclick = () => {
+      let out = photo.dataUrl;
+      try {
+        out = canvas.toDataURL('image/jpeg', 0.82);
+      } catch (_) {}
+      closeModal();
+      if (onDone) onDone(out);
+    };
   }
 
   function renderReport(job, isExport) {
@@ -952,7 +1446,7 @@
           .map(
             (f) => `
             <div class="report-finding">
-              <div class="obs">${escapeHtml(f.observation)}</div>
+              <div class="obs">${f.severity ? `<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span> ` : ''}${escapeHtml(f.observation)}</div>
               ${f.recommendation ? `<div class="rec"><strong>Recommendation:</strong> ${escapeHtml(f.recommendation)}</div>` : ''}
             </div>`
           )
