@@ -15,6 +15,14 @@ const SECTIONS = [
   { id: 'limitations', name: 'Limitations / Not Inspected', icon: '⚠' },
 ];
 
+/** Opt-in extras — not in the section list or PDF until the inspector adds them to a job. */
+const OPTIONAL_SECTIONS = [
+  { id: 'pool_spa', name: 'Pool / Spa', icon: '🏊' },
+  { id: 'irrigation', name: 'Irrigation / Sprinklers', icon: '💦' },
+  { id: 'outbuildings', name: 'Outbuildings / Detached structures', icon: '🏚️' },
+  { id: 'dock', name: 'Dock / Waterfront', icon: '⚓' },
+];
+
 const STORAGE_KEY = 'inspectdraft_v1';
 const THEME_KEY = 'inspectdraft_theme';
 
@@ -38,8 +46,75 @@ function createJob(meta) {
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     isSample: !!meta.isSample,
+    /** Ids from OPTIONAL_SECTIONS the inspector opted into for this job. Default: none. */
+    optionalSectionIds: Array.isArray(meta.optionalSectionIds) ? meta.optionalSectionIds.slice() : [],
     sections,
   };
+}
+
+function allSectionDefs() {
+  return SECTIONS.concat(OPTIONAL_SECTIONS);
+}
+
+function getSectionDef(id) {
+  return allSectionDefs().find((s) => s.id === id) || null;
+}
+
+function isOptionalSectionId(id) {
+  return OPTIONAL_SECTIONS.some((s) => s.id === id);
+}
+
+/** Migrate older jobs and keep section blobs in sync with optionalSectionIds. */
+function ensureJobShape(job) {
+  if (!job) return job;
+  if (!job.sections || typeof job.sections !== 'object') job.sections = {};
+  if (!Array.isArray(job.optionalSectionIds)) job.optionalSectionIds = [];
+  // Dedupe + drop unknown optional ids
+  const seen = new Set();
+  job.optionalSectionIds = job.optionalSectionIds.filter((id) => {
+    if (!isOptionalSectionId(id) || seen.has(id)) return false;
+    seen.add(id);
+    return true;
+  });
+  SECTIONS.forEach((s) => {
+    if (!job.sections[s.id]) job.sections[s.id] = emptySection();
+  });
+  job.optionalSectionIds.forEach((id) => {
+    if (!job.sections[id]) job.sections[id] = emptySection();
+  });
+  return job;
+}
+
+/** Core 12 + selected optionals, in display order (core first, then optionals as added). */
+function getActiveSections(job) {
+  ensureJobShape(job);
+  const optionals = job.optionalSectionIds
+    .map((id) => OPTIONAL_SECTIONS.find((s) => s.id === id))
+    .filter(Boolean);
+  return SECTIONS.concat(optionals);
+}
+
+function getAvailableOptionals(job) {
+  ensureJobShape(job);
+  const selected = new Set(job.optionalSectionIds);
+  return OPTIONAL_SECTIONS.filter((s) => !selected.has(s.id));
+}
+
+function addOptionalToJob(job, sectionId) {
+  ensureJobShape(job);
+  if (!isOptionalSectionId(sectionId)) return false;
+  if (job.optionalSectionIds.includes(sectionId)) return false;
+  job.optionalSectionIds.push(sectionId);
+  if (!job.sections[sectionId]) job.sections[sectionId] = emptySection();
+  return true;
+}
+
+function removeOptionalFromJob(job, sectionId) {
+  ensureJobShape(job);
+  if (!job.optionalSectionIds.includes(sectionId)) return false;
+  job.optionalSectionIds = job.optionalSectionIds.filter((id) => id !== sectionId);
+  delete job.sections[sectionId];
+  return true;
 }
 
 /**
@@ -260,6 +335,8 @@ function buildSampleJob() {
   };
 
   // Leave structure, interior, insulation, appliances, garage empty → "Not recorded"
+  // Optionals (Pool/Spa, Irrigation, Outbuildings, Dock) stay OFF by default —
+  // add via "Add optional system" on the Sections screen when a property needs them.
   return job;
 }
 

@@ -42,10 +42,14 @@
       const raw = localStorage.getItem(STORAGE_KEY);
       if (raw) {
         const parsed = JSON.parse(raw);
-        if (parsed && Array.isArray(parsed.jobs)) return parsed;
+        if (parsed && Array.isArray(parsed.jobs)) {
+          parsed.jobs.forEach(ensureJobShape);
+          return parsed;
+        }
       }
     } catch (_) {}
     const s = defaultStore();
+    s.jobs.forEach(ensureJobShape);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(s));
     return s;
   }
@@ -118,11 +122,13 @@
   }
 
   function jobProgress(job) {
+    const active = getActiveSections(job);
     let filled = 0;
-    SECTIONS.forEach((sec) => {
+    active.forEach((sec) => {
       if (!sectionStats(job, sec.id).empty) filled++;
     });
-    return { filled, total: SECTIONS.length, pct: Math.round((filled / SECTIONS.length) * 100) };
+    const total = active.length || 1;
+    return { filled, total: active.length, pct: Math.round((filled / total) * 100) };
   }
 
   function toast(msg) {
@@ -225,8 +231,14 @@
       $headerSub.textContent = job.client || 'Sections';
       renderSections(job);
     } else if (view === 'section' && job) {
-      const sec = SECTIONS.find((s) => s.id === currentSectionId);
-      $headerTitle.textContent = sec ? sec.name : 'Section';
+      ensureJobShape(job);
+      const sec = getSectionDef(currentSectionId);
+      const onJob = sec && (SECTIONS.some((s) => s.id === sec.id) || job.optionalSectionIds.includes(sec.id));
+      if (!sec || !onJob) {
+        navigate('sections');
+        return;
+      }
+      $headerTitle.textContent = sec.name;
       $headerSub.textContent = job.address.split(',')[0];
       renderSectionDetail(job, sec);
     } else if ((view === 'preview' || view === 'export') && job) {
@@ -256,7 +268,7 @@
               <span class="b-icon">✓</span>
               <div>
                 <strong>Capture notes &amp; photos on site</strong>
-                <span>Twelve fixed systems. Empty exports as “Not recorded” — blank never means pass.</span>
+                <span>Twelve core systems, plus optional extras when needed. Empty exports as “Not recorded” — blank never means pass.</span>
               </div>
             </li>
             <li>
@@ -454,9 +466,14 @@
   }
 
   function renderSections(job) {
+    ensureJobShape(job);
     const prog = jobProgress(job);
-    const rows = SECTIONS.map((sec) => {
+    const active = getActiveSections(job);
+    const available = getAvailableOptionals(job);
+
+    const rows = active.map((sec) => {
       const st = sectionStats(job, sec.id);
+      const optional = isOptionalSectionId(sec.id);
       let statusClass = '';
       let statusText = 'Not recorded';
       if (st.hasFindings) {
@@ -470,15 +487,22 @@
       const trailing = st.hasFindings
         ? `<span class="section-check" aria-label="Completed">✓</span>`
         : `<span class="section-chevron">›</span>`;
+      const badge = optional ? `<span class="optional-badge">Optional</span>` : '';
+      const removeBtn = optional
+        ? `<button type="button" class="btn-icon section-remove-opt" data-remove-optional="${sec.id}" aria-label="Remove ${escapeHtml(sec.name)}" title="Remove optional system">×</button>`
+        : '';
       return `
-        <button type="button" class="section-row" data-section="${sec.id}">
-          <span class="section-icon">${sec.icon}</span>
-          <span class="section-info">
-            <strong>${escapeHtml(sec.name)}</strong>
-            <span class="section-status ${statusClass}">${statusText}</span>
-          </span>
-          ${trailing}
-        </button>`;
+        <div class="section-row-wrap${optional ? ' is-optional' : ''}">
+          <button type="button" class="section-row" data-section="${sec.id}">
+            <span class="section-icon">${sec.icon}</span>
+            <span class="section-info">
+              <strong>${escapeHtml(sec.name)}${badge}</strong>
+              <span class="section-status ${statusClass}">${statusText}</span>
+            </span>
+            ${trailing}
+          </button>
+          ${removeBtn}
+        </div>`;
     }).join('');
 
     $main.innerHTML = `
@@ -491,14 +515,135 @@
         </div>
         <div class="progress-label" style="margin-top:12px">${prog.filled} of ${prog.total} systems have notes or findings</div>
         <div class="progress-bar"><div class="progress-fill" style="width:${prog.pct}%"></div></div>
-        <p style="font-size:0.75rem;color:var(--text-dim)">Empty sections export as <strong style="color:var(--text-muted)">Not recorded</strong> — blank does not mean pass.</p>
+        <p style="font-size:0.75rem;color:var(--text-dim)">Empty sections export as <strong style="color:var(--text-muted)">Not recorded</strong> — blank does not mean pass. Optional systems appear only after you add them.</p>
       </div>
+
+      <div class="sections-toolbar">
+        <button type="button" class="btn btn-outline btn-sm" id="btn-add-optional" ${available.length ? '' : 'disabled'}>
+          ＋ Add optional system
+        </button>
+        <button type="button" class="btn-icon sections-overflow" id="btn-sections-menu" aria-label="More options" title="More">☰</button>
+      </div>
+
       <div class="sections-grid">${rows}</div>
     `;
 
     $main.querySelectorAll('[data-section]').forEach((el) => {
       el.addEventListener('click', () => navigate('section', { sectionId: el.getAttribute('data-section') }));
     });
+    $main.querySelectorAll('[data-remove-optional]').forEach((el) => {
+      el.addEventListener('click', (e) => {
+        e.stopPropagation();
+        confirmRemoveOptional(job, el.getAttribute('data-remove-optional'));
+      });
+    });
+    const addBtn = document.getElementById('btn-add-optional');
+    if (addBtn) addBtn.onclick = () => openOptionalPicker(job);
+    const menuBtn = document.getElementById('btn-sections-menu');
+    if (menuBtn) {
+      menuBtn.onclick = () => {
+        openModal(`
+          <div class="modal-sheet">
+            <h2>Job options</h2>
+            <button type="button" class="picker-item" id="menu-add-optional" ${available.length ? '' : 'disabled'}>
+              <span class="picker-icon">＋</span>
+              <span class="picker-info">
+                <strong>Add optional system</strong>
+                <span>Pool / Spa, Irrigation, Outbuildings, Dock…</span>
+              </span>
+            </button>
+            <div class="modal-actions">
+              <button type="button" class="btn btn-outline" id="modal-cancel">Close</button>
+            </div>
+          </div>`);
+        document.getElementById('modal-cancel').onclick = closeModal;
+        const m = document.getElementById('menu-add-optional');
+        if (m && !m.disabled) {
+          m.onclick = () => {
+            closeModal();
+            openOptionalPicker(job);
+          };
+        }
+      };
+    }
+  }
+
+  function openOptionalPicker(job) {
+    ensureJobShape(job);
+    const available = getAvailableOptionals(job);
+    if (!available.length) {
+      toast('All optional systems already added');
+      return;
+    }
+    const items = available
+      .map(
+        (sec) => `
+        <button type="button" class="picker-item" data-add-optional="${sec.id}">
+          <span class="picker-icon">${sec.icon}</span>
+          <span class="picker-info">
+            <strong>${escapeHtml(sec.name)}</strong>
+            <span>Adds to this job only — omit from PDF until filled</span>
+          </span>
+        </button>`
+      )
+      .join('');
+    openModal(`
+      <div class="modal-sheet">
+        <h2>Add optional system</h2>
+        <p style="color:var(--text-muted);font-size:0.85rem;margin-bottom:12px">
+          These do not appear in the report until you add them. Empty optionals export as <em>Not recorded</em>, same as core systems.
+        </p>
+        <div class="picker-list">${items}</div>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="modal-cancel">Cancel</button>
+        </div>
+      </div>`);
+    document.getElementById('modal-cancel').onclick = closeModal;
+    $modalRoot.querySelectorAll('[data-add-optional]').forEach((el) => {
+      el.onclick = () => {
+        const id = el.getAttribute('data-add-optional');
+        if (addOptionalToJob(job, id)) {
+          saveStore();
+          closeModal();
+          const def = getSectionDef(id);
+          toast(`Added ${def ? def.name : 'system'}`);
+          render();
+        }
+      };
+    });
+  }
+
+  function confirmRemoveOptional(job, sectionId) {
+    ensureJobShape(job);
+    const def = getSectionDef(sectionId);
+    if (!def || !job.optionalSectionIds.includes(sectionId)) return;
+    const st = sectionStats(job, sectionId);
+    const hasContent = !st.empty;
+    const findingsCount = (job.sections[sectionId] && job.sections[sectionId].findings)
+      ? job.sections[sectionId].findings.length
+      : 0;
+    const warn = hasContent
+      ? `<p style="font-size:0.85rem;color:var(--warn);margin-bottom:8px">This system has ${findingsCount ? findingsCount + ' finding(s)' : 'notes or photos'}. Removing it deletes that data from this job and drops it from the PDF.</p>`
+      : `<p style="font-size:0.85rem;color:var(--text-dim);margin-bottom:8px">No findings yet. You can add it again later if needed.</p>`;
+    openModal(`
+      <div class="modal-sheet">
+        <h2>Remove ${escapeHtml(def.name)}?</h2>
+        ${warn}
+        <p style="font-size:0.8rem;color:var(--text-muted)">Optional systems only appear when you add them. Core sections stay.</p>
+        <div class="modal-actions">
+          <button type="button" class="btn btn-outline" id="modal-cancel">Cancel</button>
+          <button type="button" class="btn btn-danger" id="modal-confirm">Remove</button>
+        </div>
+      </div>`);
+    document.getElementById('modal-cancel').onclick = closeModal;
+    document.getElementById('modal-confirm').onclick = () => {
+      removeOptionalFromJob(job, sectionId);
+      saveStore();
+      closeModal();
+      toast(`Removed ${def.name}`);
+      if (view === 'section' && currentSectionId === sectionId) navigate('sections');
+      else render();
+    };
   }
 
   function renderSectionDetail(job, sec) {
@@ -604,6 +749,15 @@
         <button type="button" class="btn btn-ai" id="btn-structure">Structure notes <span class="stub-badge" style="background:rgba(255,255,255,0.25);color:#fff">Stub AI</span></button>
         <button type="button" class="btn btn-navy" id="btn-save-section">Save section</button>
       </div>
+
+      ${
+        isOptionalSectionId(sec.id)
+          ? `<div class="optional-section-footer">
+               <span class="optional-badge">Optional system</span>
+               <button type="button" class="btn btn-ghost btn-sm" id="btn-remove-optional-section">Remove from job</button>
+             </div>`
+          : ''
+      }
     `;
 
     const notesEl = document.getElementById('section-notes');
@@ -621,6 +775,11 @@
       saveStore();
       toast('Section saved');
     };
+
+    const removeOptBtn = document.getElementById('btn-remove-optional-section');
+    if (removeOptBtn) {
+      removeOptBtn.onclick = () => confirmRemoveOptional(job, sec.id);
+    }
 
     document.getElementById('btn-structure').onclick = () => {
       data.notes = notesEl.value;
@@ -736,7 +895,8 @@
   }
 
   function renderReport(job, isExport) {
-    const sectionsHtml = SECTIONS.map((sec) => {
+    ensureJobShape(job);
+    const sectionsHtml = getActiveSections(job).map((sec) => {
       const data = job.sections[sec.id] || emptySection();
       const st = sectionStats(job, sec.id);
 
@@ -841,6 +1001,7 @@
     store = defaultStore();
     saveStore();
   }
+  store.jobs.forEach(ensureJobShape);
 
   // Deep links for demos/screenshots: ?view=landing|jobs|sections|preview|export|section&section=roof
   (function applyDeepLink() {

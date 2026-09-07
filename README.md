@@ -28,15 +28,16 @@ No build step. Vanilla HTML / CSS / JS. Data persists in `localStorage`.
 1. **Landing** — headline, benefits, screenshot strip, CTAs into the app
 2. **Jobs list** — create / open / delete jobs (address, client, date, inspector)
 3. **Seeded sample job** — Austin address with Roof, Electrical, Plumbing, HVAC, Exterior, Grounds, Limitations already filled so the demo works immediately
-4. **12 fixed sections** — Roof, Exterior, Structure, Electrical, Plumbing, HVAC, Interior, Insulation/Ventilation, Appliances, Garage, Grounds, Limitations / Not Inspected
-5. **Per section** — text notes, photos (file / camera), editable findings; **Structure notes** is the hero action
-6. **Empty sections** — hint: “Walk a system, add notes, structure, export.”
-7. **Structure notes (stub AI)** — client-side heuristics split notes into `{observation, recommendation}`; labeled as stub AI; confirms before replacing findings
-8. **Edit / delete findings** before export
-9. **Preview + Export** — print-friendly HTML report; browser Print → Save as PDF
-10. **Disclaimer footer** — *“Draft for professional review. AI-assisted structuring — verify all findings.”*
-11. **Empty sections** → **Not recorded** (blank ≠ pass)
-12. **Light field UI** (navy chrome) with optional dark toggle; large tap targets, mobile-first layout
+4. **12 core sections** — Roof, Exterior, Structure, Electrical, Plumbing, HVAC, Interior, Insulation/Ventilation, Appliances, Garage, Grounds, Limitations / Not Inspected (default template)
+5. **Opt-in optional systems** — Pool / Spa, Irrigation / Sprinklers, Outbuildings / Detached structures, Dock / Waterfront. Add via **Add optional system** (or menu) on Sections. Not added → omitted from list and PDF. Added but empty → Not recorded (same as core). Removable with confirm. Sample job leaves optionals off.
+6. **Per section** — text notes, photos (file / camera), editable findings; **Structure notes** is the hero action
+7. **Empty sections** — hint: “Walk a system, add notes, structure, export.”
+8. **Structure notes (stub AI)** — client-side heuristics split notes into `{observation, recommendation}`; labeled as stub AI; confirms before replacing findings
+9. **Edit / delete findings** before export
+10. **Preview + Export** — print-friendly HTML report; browser Print → Save as PDF
+11. **Disclaimer footer** — *“Draft for professional review. AI-assisted structuring — verify all findings.”*
+12. **Empty sections** → **Not recorded** (blank ≠ pass)
+13. **Light field UI** (navy chrome) with optional dark toggle; large tap targets, mobile-first layout
 
 ## Out of scope (by design)
 
@@ -63,7 +64,7 @@ inspectdraft/
   index.html
   BRAND.md
   css/styles.css           # brand tokens + UI
-  js/data.js               # sections, sample job, stub AI
+  js/data.js               # core + optional sections, sample job, stub AI
   js/app.js                # SPA + localStorage
   assets/brand/            # logo SVGs + brand-board.png
   assets/screenshots/
