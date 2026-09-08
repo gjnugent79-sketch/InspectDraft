@@ -323,16 +323,19 @@ function buildSampleJob() {
         id: uid(),
         observation: 'Several lifted asphalt shingle tabs at rear slope near ridge vent; shingles appear mid-life (~12–15 years).',
         recommendation: 'Seal or replace lifted tabs; have a qualified roofer evaluate remaining service life.',
+        severity: 'major',
       },
       {
         id: uid(),
         observation: 'Chimney flashing shows minor surface rust; no active leak evidence observed in attic below.',
         recommendation: 'Monitor for staining; further evaluation by a roofing professional if conditions change.',
+        severity: 'maintenance',
       },
       {
         id: uid(),
         observation: 'Gutters clogged with debris on the north side.',
         recommendation: 'Clear gutters and downspouts to maintain proper drainage.',
+        severity: 'maintenance',
       },
     ],
   };
@@ -346,21 +349,25 @@ function buildSampleJob() {
         id: uid(),
         observation: 'Service panel labeled Federal Pacific (200A) with double-pole breakers present.',
         recommendation: 'Federal Pacific panels have a history of concerns; recommend evaluation by a licensed electrician for replacement consideration.',
+        severity: 'major',
       },
       {
         id: uid(),
         observation: 'Two open knockouts at bottom of electrical panel.',
         recommendation: 'Install knockout seals to maintain enclosure integrity.',
+        severity: 'safety',
       },
       {
         id: uid(),
         observation: 'GFCI outlet in hall bath did not trip when tested.',
         recommendation: 'Repair or replace GFCI; verify protection for bathroom circuits.',
+        severity: 'safety',
       },
       {
         id: uid(),
         observation: 'Smoke detector in upstairs hallway emitting battery chirp.',
         recommendation: 'Replace batteries or unit; test all smoke/CO detectors.',
+        severity: 'safety',
       },
     ],
   };
@@ -374,11 +381,13 @@ function buildSampleJob() {
         id: uid(),
         observation: 'Water heater TPR valve discharge pipe terminates too high above the floor.',
         recommendation: 'Extend discharge pipe to within 6 inches of floor per typical code guidance; verify with local requirements.',
+        severity: 'safety',
       },
       {
         id: uid(),
         observation: 'Exterior hose bib at rear drips when shut off.',
         recommendation: 'Repair or replace hose bib packing/valve to stop drip.',
+        severity: 'maintenance',
       },
     ],
   };
@@ -391,6 +400,7 @@ function buildSampleJob() {
         id: uid(),
         observation: 'HVAC filter dirty / overdue for change.',
         recommendation: 'Replace filter now and maintain on manufacturer schedule.',
+        severity: 'maintenance',
       },
     ],
   };
@@ -409,6 +419,7 @@ function buildSampleJob() {
         id: uid(),
         observation: 'Grading slopes toward foundation at northwest corner.',
         recommendation: 'Regrade to slope away from foundation; improve drainage as needed.',
+        severity: 'major',
       },
     ],
   };
@@ -577,10 +588,82 @@ const SEVERITY_OPTIONS = [
   { id: 'maintenance', label: 'Maintenance' },
 ];
 
+
 function severityLabel(id) {
   const s = SEVERITY_OPTIONS.find((x) => x.id === id);
   return s ? s.label : '';
 }
+
+/** Severities that auto-include a finding on the punch list (US) / snagging list (UK). */
+const PUNCH_SEVERITIES = ['safety', 'major', 'maintenance'];
+const PUNCH_SEV_RANK = { safety: 0, major: 1, maintenance: 2 };
+
+function isPunchSeverity(sev) {
+  return PUNCH_SEVERITIES.includes(sev);
+}
+
+/** True when finding has a punch severity or was manually flagged onPunchList. */
+function isOnPunchList(finding) {
+  if (!finding) return false;
+  if (isPunchSeverity(finding.severity)) return true;
+  return !!finding.onPunchList;
+}
+
+/**
+ * Collect punch-list items across active systems (not a 13th building system).
+ * Sorted: Safety → Major → Maintenance → manual adds; then by system name.
+ */
+function collectPunchListItems(job) {
+  ensureJobShape(job);
+  const items = [];
+  getActiveSections(job).forEach((sec) => {
+    const data = job.sections[sec.id];
+    if (!data || !Array.isArray(data.findings)) return;
+    data.findings.forEach((f) => {
+      if (!f || !String(f.observation || '').trim()) return;
+      if (!isOnPunchList(f)) return;
+      items.push({
+        sectionId: sec.id,
+        sectionName: sec.name,
+        sectionIcon: sec.icon,
+        finding: f,
+        viaSeverity: isPunchSeverity(f.severity),
+      });
+    });
+  });
+  items.sort((a, b) => {
+    const ra = a.viaSeverity ? (PUNCH_SEV_RANK[a.finding.severity] ?? 8) : 9;
+    const rb = b.viaSeverity ? (PUNCH_SEV_RANK[b.finding.severity] ?? 8) : 9;
+    if (ra !== rb) return ra - rb;
+    const bySec = a.sectionName.localeCompare(b.sectionName);
+    if (bySec) return bySec;
+    return String(a.finding.observation || '').localeCompare(String(b.finding.observation || ''));
+  });
+  return items;
+}
+
+/** Findings that are not on the punch list (for secondary “Other findings” UI). */
+function collectOtherFindings(job) {
+  ensureJobShape(job);
+  const items = [];
+  getActiveSections(job).forEach((sec) => {
+    if (sec.id === 'limitations') return;
+    const data = job.sections[sec.id];
+    if (!data || !Array.isArray(data.findings)) return;
+    data.findings.forEach((f) => {
+      if (!f || !String(f.observation || '').trim()) return;
+      if (isOnPunchList(f)) return;
+      items.push({
+        sectionId: sec.id,
+        sectionName: sec.name,
+        sectionIcon: sec.icon,
+        finding: f,
+      });
+    });
+  });
+  return items;
+}
+
 
 function loadCustomSnippets() {
   try {

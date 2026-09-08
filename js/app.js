@@ -4,7 +4,7 @@
 
   // ——— State ———
   let store = loadStore();
-  let view = 'landing'; // landing | jobs | job-form | sections | section | preview | export
+  let view = 'landing'; // landing | jobs | job-form | sections | section | punchlist | preview | export
   let currentJobId = null;
   let currentSectionId = null;
   let editingFindingId = null;
@@ -33,6 +33,7 @@
     if (!btn) return;
     const v = btn.dataset.view;
     if (v === 'sections') navigate('sections');
+    else if (v === 'punchlist') navigate('punchlist');
     else if (v === 'preview') navigate('preview');
     else if (v === 'export') navigate('export');
   });
@@ -90,7 +91,7 @@
 
   function onBack() {
     if (view === 'section') navigate('sections');
-    else if (view === 'sections' || view === 'preview' || view === 'export') navigate('jobs');
+    else if (view === 'sections' || view === 'punchlist' || view === 'preview' || view === 'export') navigate('jobs');
     else if (view === 'job-form') navigate('jobs');
     else if (view === 'jobs') navigate('landing');
     else navigate('landing');
@@ -200,7 +201,7 @@
 
   // ——— Render ———
   function render() {
-    const inJob = ['sections', 'section', 'preview', 'export'].includes(view);
+    const inJob = ['sections', 'section', 'punchlist', 'preview', 'export'].includes(view);
     const isLanding = view === 'landing';
     $bottomNav.classList.toggle('hidden', !inJob || view === 'section');
     $main.classList.toggle('no-nav', !inJob || view === 'section' || isLanding);
@@ -244,6 +245,10 @@
       $headerTitle.textContent = sec.name;
       $headerSub.textContent = job.address.split(',')[0];
       renderSectionDetail(job, sec);
+    } else if (view === 'punchlist' && job) {
+      $headerTitle.textContent = 'Punch list';
+      $headerSub.textContent = 'Snagging / repair summary';
+      renderPunchList(job);
     } else if ((view === 'preview' || view === 'export') && job) {
       $headerTitle.textContent = view === 'export' ? 'Export' : 'Preview';
       $headerSub.textContent = job.address.split(',')[0];
@@ -547,6 +552,16 @@
         <button type="button" class="btn btn-ghost btn-sm" id="btn-edit-job" style="margin-top:10px">✎ Edit job details</button>
       </div>
 
+      <button type="button" class="punch-entry-card" id="btn-goto-punchlist">
+        <span class="punch-entry-icon">✅</span>
+        <span class="punch-entry-body">
+          <strong>Punch list</strong>
+          <span class="punch-entry-sub">Snagging / repair summary · Safety, Major &amp; Maintenance auto-include</span>
+          <span class="punch-entry-count" id="punch-entry-count"></span>
+        </span>
+        <span class="section-chevron">›</span>
+      </button>
+
       <div class="sections-toolbar">
         <button type="button" class="btn btn-outline btn-sm" id="btn-add-optional" ${available.length ? '' : 'disabled'}>
           ＋ Add optional system
@@ -576,6 +591,17 @@
     const editJobBtn = document.getElementById('btn-edit-job');
     if (editJobBtn) {
       editJobBtn.onclick = () => navigate('job-form', { editingJobId: job.id, jobId: job.id });
+    }
+    const punchBtn = document.getElementById('btn-goto-punchlist');
+    if (punchBtn) {
+      const n = collectPunchListItems(job).length;
+      const countEl = document.getElementById('punch-entry-count');
+      if (countEl) {
+        countEl.textContent = n
+          ? `${n} item${n === 1 ? '' : 's'} ready for buyer/agent summary`
+          : 'No items yet — flag severity or add findings';
+      }
+      punchBtn.onclick = () => navigate('punchlist');
     }
   }
 
@@ -765,8 +791,18 @@
               const sevBadge = f.severity
                 ? `<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span>`
                 : '';
+              const punchAuto = isPunchSeverity(f.severity);
+              const punchManual = !!f.onPunchList;
+              let punchBtn = '';
+              if (punchAuto) {
+                punchBtn = `<span class="punch-chip punch-chip-auto" title="Auto-included because severity is set">On punch list</span>`;
+              } else if (punchManual) {
+                punchBtn = `<button type="button" class="btn btn-outline btn-sm punch-toggle is-on" data-punch-toggle="${f.id}">✓ On punch list</button>`;
+              } else {
+                punchBtn = `<button type="button" class="btn btn-ghost btn-sm punch-toggle" data-punch-toggle="${f.id}">＋ Add to punch list</button>`;
+              }
               return `
-                <div class="finding-card" data-finding="${f.id}">
+                <div class="finding-card${punchAuto || punchManual ? ' on-punch' : ''}" data-finding="${f.id}">
                   <div class="finding-label">Observation ${sevBadge}</div>
                   <div class="finding-obs">${escapeHtml(f.observation)}</div>
                   ${
@@ -775,6 +811,7 @@
                       : `<div class="finding-label" style="margin-top:8px">Recommendation</div><div class="finding-rec" style="border-color:var(--border);font-style:italic;color:var(--text-dim)">None yet — tap Edit to add</div>`
                   }
                   <div class="finding-actions">
+                    ${punchBtn}
                     <button type="button" class="btn btn-ghost btn-sm" data-edit-finding="${f.id}">Edit</button>
                     <button type="button" class="btn btn-danger btn-sm" data-delete-finding="${f.id}">Delete</button>
                   </div>
@@ -951,7 +988,7 @@
 
     document.getElementById('btn-add-finding').onclick = () => {
       data.notes = notesEl.value;
-      const f = { id: uid(), observation: '', recommendation: '', severity: '' };
+      const f = { id: uid(), observation: '', recommendation: '', severity: '', onPunchList: false };
       data.findings.push(f);
       editingFindingId = f.id;
       saveStore();
@@ -997,6 +1034,17 @@
         data.findings = data.findings.filter((f) => f.id !== id);
         saveStore();
         toast('Finding removed');
+        render();
+      };
+    });
+    $main.querySelectorAll('[data-punch-toggle]').forEach((el) => {
+      el.onclick = () => {
+        const id = el.getAttribute('data-punch-toggle');
+        const f = data.findings.find((x) => x.id === id);
+        if (!f || isPunchSeverity(f.severity)) return;
+        f.onPunchList = !f.onPunchList;
+        saveStore();
+        toast(f.onPunchList ? 'Added to punch list' : 'Removed from punch list');
         render();
       };
     });
@@ -1426,9 +1474,148 @@
     };
   }
 
+
+  function renderPunchListItemCard(item, opts) {
+    opts = opts || {};
+    const f = item.finding;
+    const sevBadge = f.severity
+      ? `<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span>`
+      : `<span class="sev-badge sev-manual">Added</span>`;
+    const via = item.viaSeverity
+      ? `<span class="punch-via">Auto · severity</span>`
+      : `<span class="punch-via">Manual</span>`;
+    let actions = '';
+    if (opts.showRemoveManual && !item.viaSeverity) {
+      actions = `<button type="button" class="btn btn-ghost btn-sm" data-punch-remove="${item.sectionId}::${f.id}">Remove</button>`;
+    }
+    if (opts.showAdd) {
+      actions = `<button type="button" class="btn btn-primary btn-sm" data-punch-add="${item.sectionId}::${f.id}">Add to punch list</button>`;
+    }
+    if (opts.showOpen) {
+      actions += `<button type="button" class="btn btn-outline btn-sm" data-open-section="${item.sectionId}">Open system</button>`;
+    }
+    return `
+      <div class="punch-item-card">
+        <div class="punch-item-top">
+          <span class="punch-system">${item.sectionIcon || ''} ${escapeHtml(item.sectionName)}</span>
+          ${sevBadge}
+          ${via}
+        </div>
+        <div class="punch-item-obs">${escapeHtml(f.observation)}</div>
+        ${
+          f.recommendation
+            ? `<div class="punch-item-rec"><strong>Rec:</strong> ${escapeHtml(f.recommendation)}</div>`
+            : `<div class="punch-item-rec muted">No recommendation yet</div>`
+        }
+        ${actions ? `<div class="finding-actions">${actions}</div>` : ''}
+      </div>`;
+  }
+
+  function renderPunchList(job) {
+    ensureJobShape(job);
+    const items = collectPunchListItems(job);
+    const others = collectOtherFindings(job);
+
+    const listHtml = items.length
+      ? items.map((it) => renderPunchListItemCard(it, { showRemoveManual: true, showOpen: true })).join('')
+      : `<div class="empty-state punch-empty">
+           <p>No punch-list items yet — flag findings as Safety/Major/Maintenance or add to punch list.</p>
+           <p class="empty-state-hint">US inspectors call this a punch list; in the UK it’s often called snagging.</p>
+         </div>`;
+
+    const otherHtml = others.length
+      ? `<div class="punch-other">
+           <h3 class="punch-other-title">Other findings</h3>
+           <p class="punch-other-hint">Not auto-included — tap Add to punch list if they should appear on the repair summary.</p>
+           ${others.map((it) => renderPunchListItemCard(it, { showAdd: true, showOpen: true })).join('')}
+         </div>`
+      : '';
+
+    $main.innerHTML = `
+      <div class="card punch-hero">
+        <div class="card-title">Punch list</div>
+        <p class="punch-subtitle">Snagging / repair summary for buyer or agent. Safety, Major, and Maintenance findings are included automatically; add others with <strong>Add to punch list</strong> on a finding.</p>
+        <div class="punch-stats">
+          <span class="punch-stat"><strong>${items.length}</strong> on list</span>
+          <span class="punch-stat dim">${others.length} other finding${others.length === 1 ? '' : 's'}</span>
+        </div>
+        <div class="punch-hero-actions">
+          <button type="button" class="btn btn-primary btn-sm" id="btn-punch-preview">Preview report section</button>
+          <button type="button" class="btn btn-outline btn-sm" id="btn-punch-sections">Back to sections</button>
+        </div>
+      </div>
+      <div class="punch-list">${listHtml}</div>
+      ${otherHtml}
+    `;
+
+    document.getElementById('btn-punch-preview').onclick = () => navigate('preview');
+    document.getElementById('btn-punch-sections').onclick = () => navigate('sections');
+
+    $main.querySelectorAll('[data-open-section]').forEach((el) => {
+      el.onclick = () => navigate('section', { sectionId: el.getAttribute('data-open-section') });
+    });
+    $main.querySelectorAll('[data-punch-add]').forEach((el) => {
+      el.onclick = () => {
+        const [secId, fid] = el.getAttribute('data-punch-add').split('::');
+        const data = job.sections[secId];
+        const f = data && data.findings.find((x) => x.id === fid);
+        if (!f || isPunchSeverity(f.severity)) return;
+        f.onPunchList = true;
+        saveStore();
+        toast('Added to punch list');
+        render();
+      };
+    });
+    $main.querySelectorAll('[data-punch-remove]').forEach((el) => {
+      el.onclick = () => {
+        const [secId, fid] = el.getAttribute('data-punch-remove').split('::');
+        const data = job.sections[secId];
+        const f = data && data.findings.find((x) => x.id === fid);
+        if (!f || isPunchSeverity(f.severity)) return;
+        f.onPunchList = false;
+        saveStore();
+        toast('Removed from punch list');
+        render();
+      };
+    });
+  }
+
+  function buildPunchListReportHtml(job) {
+    const items = collectPunchListItems(job);
+    if (!items.length) {
+      return `
+        <div class="report-section report-punch">
+          <h2>Punch list / Repair summary</h2>
+          <p class="report-not-recorded">No punch-list items yet — flag findings as Safety/Major/Maintenance or add to punch list.</p>
+          <p class="report-punch-note">Also known as snagging (UK).</p>
+        </div>`;
+    }
+    const body = items
+      .map((it) => {
+        const f = it.finding;
+        const sev = f.severity
+          ? `<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span> `
+          : `<span class="sev-badge sev-manual">Added</span> `;
+        return `
+          <div class="report-finding report-punch-item">
+            <div class="punch-report-system">${escapeHtml(it.sectionName)}</div>
+            <div class="obs">${sev}${escapeHtml(f.observation)}</div>
+            ${f.recommendation ? `<div class="rec"><strong>Recommendation:</strong> ${escapeHtml(f.recommendation)}</div>` : ''}
+          </div>`;
+      })
+      .join('');
+    return `
+      <div class="report-section report-punch">
+        <h2>Punch list / Repair summary</h2>
+        <p class="report-punch-lede">Items flagged Safety, Major, or Maintenance, plus any findings added to the punch list (snagging).</p>
+        ${body}
+      </div>`;
+  }
+
   function renderReport(job, isExport) {
     ensureJobShape(job);
-    const sectionsHtml = getActiveSections(job).map((sec) => {
+
+    function renderOneSection(sec) {
       const data = job.sections[sec.id] || emptySection();
       const st = sectionStats(job, sec.id);
 
@@ -1452,7 +1639,8 @@
           )
           .join('');
       } else if (data.notes.trim()) {
-        findingsBlock = `<div class="report-notes-raw"><strong>Raw notes (not yet structured):</strong>\n${escapeHtml(data.notes)}</div>`;
+        findingsBlock = `<div class="report-notes-raw"><strong>Raw notes (not yet structured):</strong>
+${escapeHtml(data.notes)}</div>`;
       }
 
       const photosBlock =
@@ -1466,8 +1654,18 @@
           ${findingsBlock}
           ${photosBlock}
         </div>`;
-    }).join('');
+    }
 
+    // Punch list sits after building systems / optionals, before Limitations.
+    const active = getActiveSections(job);
+    const systems = active.filter((s) => s.id !== 'limitations');
+    const limitations = active.filter((s) => s.id === 'limitations');
+    const sectionsHtml =
+      systems.map(renderOneSection).join('') +
+      buildPunchListReportHtml(job) +
+      limitations.map(renderOneSection).join('');
+
+    const punchCount = collectPunchListItems(job).length;
     const actions = isExport
       ? `
         <div class="no-print" style="margin-bottom:16px">
@@ -1479,7 +1677,8 @@
         </div>`
       : `
         <div class="no-print" style="margin-bottom:16px">
-          <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:12px">Live preview of the draft report. Empty systems show as <em>Not recorded</em>.</p>
+          <p style="color:var(--text-muted);font-size:0.9rem;margin-bottom:12px">Live preview of the draft report. Empty systems show as <em>Not recorded</em>. Punch list / Repair summary appears before Limitations.</p>
+          <button type="button" class="btn btn-navy" id="btn-goto-punchlist-preview" style="margin-bottom:8px">✅ Punch list (${punchCount})</button>
           <button type="button" class="btn btn-primary" id="btn-goto-export">Continue to Export</button>
         </div>`;
 
@@ -1524,6 +1723,8 @@
         }
       };
     } else {
+      const punchPreviewBtn = document.getElementById('btn-goto-punchlist-preview');
+      if (punchPreviewBtn) punchPreviewBtn.onclick = () => navigate('punchlist');
       document.getElementById('btn-goto-export').onclick = () => navigate('export');
     }
   }
@@ -1535,7 +1736,7 @@
   }
   store.jobs.forEach(ensureJobShape);
 
-  // Deep links for demos/screenshots: ?view=landing|jobs|sections|preview|export|section&section=roof
+  // Deep links for demos/screenshots: ?view=landing|jobs|sections|punchlist|preview|export|section&section=roof
   (function applyDeepLink() {
     const params = new URLSearchParams(location.search);
     const v = params.get('view');
@@ -1554,7 +1755,7 @@
     if (v === 'section') {
       currentSectionId = params.get('section') || 'roof';
       view = 'section';
-    } else if (['sections', 'preview', 'export'].includes(v)) {
+    } else if (['sections', 'punchlist', 'preview', 'export'].includes(v)) {
       view = v;
     }
   })();

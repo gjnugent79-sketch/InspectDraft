@@ -39,9 +39,10 @@ No build step. Vanilla HTML / CSS / JS. Data persists in `localStorage`.
 12. **Empty sections** — hint: “Walk a system, add notes, structure, export.” Empty → **Not recorded** (blank ≠ pass)
 13. **Structure notes (stub AI)** — client-side heuristics split notes into `{observation, recommendation}`; labeled as stub AI; confirms before replacing findings
 14. **Edit / delete findings** before export
-15. **Preview + Export** — print-friendly HTML report; browser Print → Save as PDF
-16. **Disclaimer footer** — *“Draft for professional review. AI-assisted structuring — verify all findings.”*
-17. **Light field UI** (navy chrome) with optional dark toggle; large tap targets, mobile-first layout
+15. **Punch list (snagging)** — cross-job repair summary (not a 13th building system). Auto-includes Safety / Major / Maintenance findings; **Add to punch list** for others (`onPunchList`). Bottom nav + Sections card + Preview entry. Preview/PDF section **Punch list / Repair summary** before Limitations.
+16. **Preview + Export** — print-friendly HTML report; browser Print → Save as PDF
+17. **Disclaimer footer** — *“Draft for professional review. AI-assisted structuring — verify all findings.”*
+18. **Light field UI** (navy chrome) with optional dark toggle; large tap targets, mobile-first layout
 
 ## Out of scope (by design)
 
@@ -59,7 +60,7 @@ Captured with headless Chrome (mobile + report):
 - `assets/screenshots/04-preview.png` — print-style preview
 - `assets/screenshots/05-export-report.png` — export / print view
 
-Deep links (for demos): `/?view=landing`, `/?view=jobs`, `/?view=sections`, `/?view=section&section=roof`, `/?view=preview`, `/?view=export`.
+Deep links (for demos): `/?view=landing`, `/?view=jobs`, `/?view=sections`, `/?view=section&section=roof`, `/?view=punchlist`, `/?view=preview`, `/?view=export`.
 
 ## Project layout
 
