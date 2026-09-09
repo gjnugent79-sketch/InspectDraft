@@ -26,6 +26,158 @@ const OPTIONAL_SECTIONS = [
 const STORAGE_KEY = 'inspectdraft_v1';
 const THEME_KEY = 'inspectdraft_theme';
 
+/** Job-level inspection conditions (header / Preview / PDF). */
+const OCCUPANCY_OPTIONS = [
+  { id: 'occupied', label: 'Occupied' },
+  { id: 'vacant', label: 'Vacant' },
+  { id: 'unknown', label: 'Unknown' },
+];
+
+const TIME_OF_DAY_OPTIONS = [
+  { id: 'morning', label: 'Morning' },
+  { id: 'afternoon', label: 'Afternoon' },
+  { id: 'evening', label: 'Evening' },
+  { id: 'other', label: 'Other' },
+];
+
+const WEATHER_OPTIONS = [
+  { id: 'sunny', label: 'Sunny / Clear' },
+  { id: 'cloudy', label: 'Cloudy' },
+  { id: 'rain', label: 'Rain' },
+  { id: 'snow', label: 'Snow' },
+  { id: 'other', label: 'Other' },
+];
+
+const BUILDING_TYPE_OPTIONS = [
+  { id: 'single_family', label: 'Single Family' },
+  { id: 'townhouse', label: 'Townhouse' },
+  { id: 'condo', label: 'Condo / Apartment' },
+  { id: 'multi_family', label: 'Multi-family' },
+  { id: 'other', label: 'Other' },
+];
+
+/** Trade / specialist tags on findings (punch list, Preview, PDF). */
+const TRADE_OPTIONS = [
+  { id: 'roofing', label: 'Roofing' },
+  { id: 'concrete', label: 'Concrete' },
+  { id: 'landscaping', label: 'Landscaping / Irrigation' },
+  { id: 'gutter', label: 'Gutter' },
+  { id: 'electrical', label: 'Electrical' },
+  { id: 'plumbing', label: 'Plumbing' },
+  { id: 'hvac', label: 'HVAC' },
+  { id: 'handyman', label: 'Handyman / DIY' },
+  { id: 'gc', label: 'General contractor' },
+  { id: 'other', label: 'Other' },
+];
+
+function defaultConditions() {
+  return {
+    occupancy: 'unknown',
+    timeOfDay: '',
+    timeOfDayOther: '',
+    weather: '',
+    weatherOther: '',
+    outdoorTemp: '',
+    tempUnit: 'F',
+    buildingType: '',
+    buildingTypeOther: '',
+  };
+}
+
+function normalizeConditions(raw) {
+  const d = defaultConditions();
+  if (!raw || typeof raw !== 'object') return d;
+  const occ = OCCUPANCY_OPTIONS.some((o) => o.id === raw.occupancy) ? raw.occupancy : 'unknown';
+  const tod = TIME_OF_DAY_OPTIONS.some((o) => o.id === raw.timeOfDay) ? raw.timeOfDay : '';
+  const weather = WEATHER_OPTIONS.some((o) => o.id === raw.weather) ? raw.weather : '';
+  const buildingType = BUILDING_TYPE_OPTIONS.some((o) => o.id === raw.buildingType) ? raw.buildingType : '';
+  const tempUnit = raw.tempUnit === 'C' ? 'C' : 'F';
+  let outdoorTemp = raw.outdoorTemp;
+  if (outdoorTemp === null || outdoorTemp === undefined) outdoorTemp = '';
+  else outdoorTemp = String(outdoorTemp).trim();
+  if (outdoorTemp && !/^-?\d+(\.\d+)?$/.test(outdoorTemp)) outdoorTemp = '';
+  return {
+    occupancy: occ,
+    timeOfDay: tod,
+    timeOfDayOther: String(raw.timeOfDayOther || '').trim(),
+    weather,
+    weatherOther: String(raw.weatherOther || '').trim(),
+    outdoorTemp,
+    tempUnit,
+    buildingType,
+    buildingTypeOther: String(raw.buildingTypeOther || '').trim(),
+  };
+}
+
+function optionLabel(options, id) {
+  const found = options.find((o) => o.id === id);
+  return found ? found.label : '';
+}
+
+function occupancyLabel(id) { return optionLabel(OCCUPANCY_OPTIONS, id) || 'Unknown'; }
+function timeOfDayLabel(id) { return optionLabel(TIME_OF_DAY_OPTIONS, id); }
+function weatherLabel(id) { return optionLabel(WEATHER_OPTIONS, id); }
+function buildingTypeLabel(id) { return optionLabel(BUILDING_TYPE_OPTIONS, id); }
+function tradeLabel(id) { return optionLabel(TRADE_OPTIONS, id); }
+
+/** Display trade including custom Other text. */
+function tradeDisplay(finding) {
+  if (!finding) return '';
+  const id = finding.trade || '';
+  if (!id) return '';
+  if (id === 'other') {
+    const custom = String(finding.tradeOther || '').trim();
+    return custom || 'Other';
+  }
+  return tradeLabel(id) || id;
+}
+
+/** Human-readable conditions for Preview/PDF cards. */
+function formatConditionsDisplay(job) {
+  ensureJobShape(job);
+  const c = job.conditions;
+  const rows = [];
+  rows.push({ key: 'Occupancy', value: occupancyLabel(c.occupancy) });
+  let tod = timeOfDayLabel(c.timeOfDay);
+  if (c.timeOfDay === 'other' && c.timeOfDayOther) tod = c.timeOfDayOther;
+  rows.push({ key: 'Time of day', value: tod || '—' });
+  let weather = weatherLabel(c.weather);
+  if (c.weather === 'other' && c.weatherOther) weather = c.weatherOther;
+  rows.push({ key: 'Weather', value: weather || '—' });
+  let temp = '—';
+  if (c.outdoorTemp !== '' && c.outdoorTemp !== null && c.outdoorTemp !== undefined) {
+    temp = c.outdoorTemp + ' °' + (c.tempUnit === 'C' ? 'C' : 'F');
+  }
+  rows.push({ key: 'Outdoor temp', value: temp });
+  let bldg = buildingTypeLabel(c.buildingType);
+  if (c.buildingType === 'other' && c.buildingTypeOther) bldg = c.buildingTypeOther;
+  rows.push({ key: 'Building type', value: bldg || '—' });
+  return rows;
+}
+
+function ensureFindingShape(f) {
+  if (!f || typeof f !== 'object') return f;
+  if (typeof f.location !== 'string') f.location = f.location ? String(f.location) : '';
+  if (!TRADE_OPTIONS.some((t) => t.id === f.trade)) f.trade = '';
+  if (typeof f.tradeOther !== 'string') f.tradeOther = f.tradeOther ? String(f.tradeOther) : '';
+  if (f.severity === undefined) f.severity = '';
+  if (f.onPunchList === undefined) f.onPunchList = false;
+  return f;
+}
+
+function emptyFinding(partial) {
+  return ensureFindingShape(Object.assign({
+    id: uid(),
+    observation: '',
+    recommendation: '',
+    severity: '',
+    onPunchList: false,
+    location: '',
+    trade: '',
+    tradeOther: '',
+  }, partial || {}));
+}
+
 function uid() {
   return 'id_' + Date.now().toString(36) + '_' + Math.random().toString(36).slice(2, 8);
 }
@@ -51,6 +203,7 @@ const CUSTOM_ICONS = [
 ];
 
 function createJob(meta) {
+  meta = meta || {};
   const sections = {};
   SECTIONS.forEach((s) => { sections[s.id] = emptySection(); });
   return {
@@ -59,6 +212,10 @@ function createJob(meta) {
     client: meta.client || '',
     date: meta.date || new Date().toISOString().slice(0, 10),
     inspector: meta.inspector || '',
+    company: meta.company || '',
+    phone: meta.phone || '',
+    email: meta.email || '',
+    conditions: normalizeConditions(meta.conditions),
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     isSample: !!meta.isSample,
@@ -134,6 +291,10 @@ function ensureJobShape(job) {
   if (!job.sections || typeof job.sections !== 'object') job.sections = {};
   if (!Array.isArray(job.optionalSectionIds)) job.optionalSectionIds = [];
   if (!Array.isArray(job.customSections)) job.customSections = [];
+  if (typeof job.company !== 'string') job.company = job.company ? String(job.company) : '';
+  if (typeof job.phone !== 'string') job.phone = job.phone ? String(job.phone) : '';
+  if (typeof job.email !== 'string') job.email = job.email ? String(job.email) : '';
+  job.conditions = normalizeConditions(job.conditions);
   // Dedupe + drop unknown preset optional ids
   const seen = new Set();
   job.optionalSectionIds = job.optionalSectionIds.filter((id) => {
@@ -158,6 +319,17 @@ function ensureJobShape(job) {
   });
   job.customSections.forEach((c) => {
     if (!job.sections[c.id]) job.sections[c.id] = emptySection();
+  });
+  Object.keys(job.sections).forEach((sid) => {
+    const sec = job.sections[sid];
+    if (!sec || typeof sec !== 'object') {
+      job.sections[sid] = emptySection();
+      return;
+    }
+    if (!Array.isArray(sec.findings)) sec.findings = [];
+    if (!Array.isArray(sec.photos)) sec.photos = [];
+    if (typeof sec.notes !== 'string') sec.notes = sec.notes ? String(sec.notes) : '';
+    sec.findings.forEach(ensureFindingShape);
   });
   return job;
 }
@@ -267,11 +439,10 @@ function structureNotesStub(rawNotes) {
     );
     const labeledRec = chunk.match(/(?:recommendation|rec\.?|action)\s*[:\-]\s*(.+)/is);
     if (labeled && labeledRec) {
-      return {
-        id: uid(),
+      return emptyFinding({
         observation: labeled[1].trim(),
         recommendation: labeledRec[1].trim(),
-      };
+      });
     }
 
     // Split on recommendation keywords
@@ -297,11 +468,10 @@ function structureNotesStub(rawNotes) {
       }
     }
 
-    return {
-      id: uid(),
+    return emptyFinding({
       observation: observation || chunk,
       recommendation: recommendation || '',
-    };
+    });
   }).filter((f) => f.observation.length > 0);
 }
 
@@ -311,7 +481,18 @@ function buildSampleJob() {
     client: 'Jordan & Alex Rivera',
     date: '2026-09-05',
     inspector: 'Gary Nugent',
+    company: 'InspectDraft Field Services',
+    phone: '(512) 555-0148',
+    email: 'gary@inspectdraft.example',
     isSample: true,
+    conditions: {
+      occupancy: 'occupied',
+      timeOfDay: 'morning',
+      weather: 'sunny',
+      outdoorTemp: '78',
+      tempUnit: 'F',
+      buildingType: 'single_family',
+    },
   });
 
   job.sections.roof = {
@@ -319,24 +500,27 @@ function buildSampleJob() {
       'Asphalt shingles appear mid-life, approx 12–15 years. Several lifted tabs at rear slope near ridge vent. Flashing at chimney shows minor surface rust; no active leak evidence in attic below. Gutters clogged with debris on north side.\n\nRecommend sealing or replacing lifted tabs and clearing gutters. Chimney flashing should be monitored; further evaluation by a roofer if staining appears.',
     photos: [],
     findings: [
-      {
-        id: uid(),
+      emptyFinding({
         observation: 'Several lifted asphalt shingle tabs at rear slope near ridge vent; shingles appear mid-life (~12–15 years).',
         recommendation: 'Seal or replace lifted tabs; have a qualified roofer evaluate remaining service life.',
         severity: 'major',
-      },
-      {
-        id: uid(),
+        location: 'Rear slope near ridge vent',
+        trade: 'roofing',
+      }),
+      emptyFinding({
         observation: 'Chimney flashing shows minor surface rust; no active leak evidence observed in attic below.',
         recommendation: 'Monitor for staining; further evaluation by a roofing professional if conditions change.',
         severity: 'maintenance',
-      },
-      {
-        id: uid(),
+        location: 'Chimney / attic below',
+        trade: 'roofing',
+      }),
+      emptyFinding({
         observation: 'Gutters clogged with debris on the north side.',
         recommendation: 'Clear gutters and downspouts to maintain proper drainage.',
         severity: 'maintenance',
-      },
+        location: 'North elevation gutters',
+        trade: 'gutter',
+      }),
     ],
   };
 
@@ -345,30 +529,34 @@ function buildSampleJob() {
       'Panel is 200A Federal Pacific — double-pole breakers present. Two open knockouts at bottom of panel. GFCI outlet in hall bath did not trip when tested. Smoke detectors present but battery chirp noted in upstairs hallway.',
     photos: [],
     findings: [
-      {
-        id: uid(),
+      emptyFinding({
         observation: 'Service panel labeled Federal Pacific (200A) with double-pole breakers present.',
         recommendation: 'Federal Pacific panels have a history of concerns; recommend evaluation by a licensed electrician for replacement consideration.',
         severity: 'major',
-      },
-      {
-        id: uid(),
+        location: 'Main service panel',
+        trade: 'electrical',
+      }),
+      emptyFinding({
         observation: 'Two open knockouts at bottom of electrical panel.',
         recommendation: 'Install knockout seals to maintain enclosure integrity.',
         severity: 'safety',
-      },
-      {
-        id: uid(),
+        location: 'Main service panel',
+        trade: 'electrical',
+      }),
+      emptyFinding({
         observation: 'GFCI outlet in hall bath did not trip when tested.',
         recommendation: 'Repair or replace GFCI; verify protection for bathroom circuits.',
         severity: 'safety',
-      },
-      {
-        id: uid(),
+        location: 'Hall bath',
+        trade: 'electrical',
+      }),
+      emptyFinding({
         observation: 'Smoke detector in upstairs hallway emitting battery chirp.',
         recommendation: 'Replace batteries or unit; test all smoke/CO detectors.',
         severity: 'safety',
-      },
+        location: 'Upstairs hallway',
+        trade: 'handyman',
+      }),
     ],
   };
 
@@ -377,18 +565,20 @@ function buildSampleJob() {
       'Water heater is 40-gal gas unit, manufactured 2014. TPR valve discharge pipe terminates too high above floor. Soft water supply noted; no active leaks under sinks. Exterior hose bib at rear drips when shut off.',
     photos: [],
     findings: [
-      {
-        id: uid(),
+      emptyFinding({
         observation: 'Water heater TPR valve discharge pipe terminates too high above the floor.',
         recommendation: 'Extend discharge pipe to within 6 inches of floor per typical code guidance; verify with local requirements.',
         severity: 'safety',
-      },
-      {
-        id: uid(),
+        location: 'Water heater closet',
+        trade: 'plumbing',
+      }),
+      emptyFinding({
         observation: 'Exterior hose bib at rear drips when shut off.',
         recommendation: 'Repair or replace hose bib packing/valve to stop drip.',
         severity: 'maintenance',
-      },
+        location: 'Rear elevation',
+        trade: 'plumbing',
+      }),
     ],
   };
 
@@ -396,12 +586,13 @@ function buildSampleJob() {
     notes: 'Furnace and AC operated during inspection. Filter dirty / overdue for change. Condensate drain line clear. Supply temps within expected range at registers sampled.',
     photos: [],
     findings: [
-      {
-        id: uid(),
+      emptyFinding({
         observation: 'HVAC filter dirty / overdue for change.',
         recommendation: 'Replace filter now and maintain on manufacturer schedule.',
         severity: 'maintenance',
-      },
+        location: 'Furnace / return',
+        trade: 'hvac',
+      }),
     ],
   };
 
@@ -415,12 +606,13 @@ function buildSampleJob() {
     notes: 'Grading slopes toward foundation at NW corner. Fence gate latch broken. Driveway has typical hairline cracks.',
     photos: [],
     findings: [
-      {
-        id: uid(),
+      emptyFinding({
         observation: 'Grading slopes toward foundation at northwest corner.',
         recommendation: 'Regrade to slope away from foundation; improve drainage as needed.',
         severity: 'major',
-      },
+        location: 'NW corner / grade',
+        trade: 'landscaping',
+      }),
     ],
   };
 
@@ -429,16 +621,16 @@ function buildSampleJob() {
       'Attic access limited by stored items — partial visual only.\nRoof walked at edges only due to pitch; center inspected from ground and drone where available.\nCrawlspace not entered — no access hatch located.\nNot inspected: security system, irrigation controller programming, pool (N/A).',
     photos: [],
     findings: [
-      {
-        id: uid(),
+      emptyFinding({
         observation: 'Attic access limited by stored items — partial visual only.',
         recommendation: '',
-      },
-      {
-        id: uid(),
+        location: 'Attic',
+      }),
+      emptyFinding({
         observation: 'Crawlspace not entered — no access hatch located.',
         recommendation: '',
-      },
+        location: 'Crawlspace',
+      }),
     ],
   };
 

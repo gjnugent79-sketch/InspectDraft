@@ -117,6 +117,178 @@
     }
   }
 
+  function optionsHtml(options, selected, includeBlank) {
+    const blank = includeBlank ? `<option value="">${includeBlank === true ? '—' : escapeHtml(includeBlank)}</option>` : '';
+    return blank + options.map((o) =>
+      `<option value="${escapeHtml(o.id)}" ${selected === o.id ? 'selected' : ''}>${escapeHtml(o.label)}</option>`
+    ).join('');
+  }
+
+  function findingMetaBadgesHtml(f) {
+    const bits = [];
+    if (f.severity) {
+      bits.push(`<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span>`);
+    }
+    const trade = tradeDisplay(f);
+    if (trade) {
+      bits.push(`<span class="trade-badge">${escapeHtml(trade)}</span>`);
+    }
+    if (f.location && String(f.location).trim()) {
+      bits.push(`<span class="loc-badge">📍 ${escapeHtml(String(f.location).trim())}</span>`);
+    }
+    return bits.length ? `<div class="finding-meta">${bits.join('')}</div>` : '';
+  }
+
+  function findingEditExtrasHtml(f) {
+    const trade = f.trade || '';
+    const showTradeOther = trade === 'other';
+    return `
+      <div class="form-group">
+        <label for="edit-location">Location <span class="form-hint-inline">(optional)</span></label>
+        <input id="edit-location" type="text" maxlength="120" placeholder="e.g. Attic, Garage, East elevation" value="${escapeHtml(f.location || '')}" />
+      </div>
+      <div class="form-row-2">
+        <div class="form-group">
+          <label for="edit-trade">Trade / specialist <span class="form-hint-inline">(optional)</span></label>
+          <select id="edit-trade">
+            ${optionsHtml(TRADE_OPTIONS, trade, 'None')}
+          </select>
+        </div>
+        <div class="form-group ${showTradeOther ? '' : 'hidden'}" id="edit-trade-other-wrap">
+          <label for="edit-trade-other">Other trade</label>
+          <input id="edit-trade-other" type="text" maxlength="80" placeholder="Specify trade" value="${escapeHtml(f.tradeOther || '')}" />
+        </div>
+      </div>`;
+  }
+
+  function wireTradeOtherToggle() {
+    const tradeEl = document.getElementById('edit-trade');
+    const wrap = document.getElementById('edit-trade-other-wrap');
+    if (!tradeEl || !wrap) return;
+    const sync = () => {
+      if (tradeEl.value === 'other') wrap.classList.remove('hidden');
+      else wrap.classList.add('hidden');
+    };
+    tradeEl.addEventListener('change', sync);
+    sync();
+  }
+
+  function readFindingExtrasInto(f) {
+    const loc = document.getElementById('edit-location');
+    const trade = document.getElementById('edit-trade');
+    const tradeOther = document.getElementById('edit-trade-other');
+    if (loc) f.location = loc.value.trim();
+    if (trade) f.trade = trade.value || '';
+    if (tradeOther) f.tradeOther = tradeOther.value.trim();
+    if (f.trade !== 'other') f.tradeOther = '';
+    ensureFindingShape(f);
+  }
+
+  function conditionsFormHtml(c) {
+    c = normalizeConditions(c);
+    const showTodOther = c.timeOfDay === 'other';
+    const showWeatherOther = c.weather === 'other';
+    const showBldgOther = c.buildingType === 'other';
+    return `
+      <fieldset class="conditions-fieldset">
+        <legend>Inspection conditions</legend>
+        <p class="form-hint" style="margin-top:0">Shown on Preview / PDF header. Migrate-safe defaults for older jobs.</p>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="f-occupancy">Occupancy</label>
+            <select id="f-occupancy" name="occupancy">${optionsHtml(OCCUPANCY_OPTIONS, c.occupancy)}</select>
+          </div>
+          <div class="form-group">
+            <label for="f-time-of-day">Time of day</label>
+            <select id="f-time-of-day" name="timeOfDay">${optionsHtml(TIME_OF_DAY_OPTIONS, c.timeOfDay, '—')}</select>
+          </div>
+        </div>
+        <div class="form-group ${showTodOther ? '' : 'hidden'}" id="f-time-other-wrap">
+          <label for="f-time-other">Time of day (other)</label>
+          <input id="f-time-other" name="timeOfDayOther" type="text" maxlength="60" placeholder="e.g. Late morning" value="${escapeHtml(c.timeOfDayOther)}" />
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="f-weather">Weather</label>
+            <select id="f-weather" name="weather">${optionsHtml(WEATHER_OPTIONS, c.weather, '—')}</select>
+          </div>
+          <div class="form-group">
+            <label for="f-building-type">Building type</label>
+            <select id="f-building-type" name="buildingType">${optionsHtml(BUILDING_TYPE_OPTIONS, c.buildingType, '—')}</select>
+          </div>
+        </div>
+        <div class="form-group ${showWeatherOther ? '' : 'hidden'}" id="f-weather-other-wrap">
+          <label for="f-weather-other">Weather (other)</label>
+          <input id="f-weather-other" name="weatherOther" type="text" maxlength="60" value="${escapeHtml(c.weatherOther)}" />
+        </div>
+        <div class="form-group ${showBldgOther ? '' : 'hidden'}" id="f-building-other-wrap">
+          <label for="f-building-other">Building type (other)</label>
+          <input id="f-building-other" name="buildingTypeOther" type="text" maxlength="60" value="${escapeHtml(c.buildingTypeOther)}" />
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="f-outdoor-temp">Approx. outdoor temperature</label>
+            <input id="f-outdoor-temp" name="outdoorTemp" type="number" step="1" inputmode="numeric" placeholder="e.g. 78" value="${escapeHtml(c.outdoorTemp)}" />
+          </div>
+          <div class="form-group">
+            <label for="f-temp-unit">Temperature unit</label>
+            <select id="f-temp-unit" name="tempUnit">
+              <option value="F" ${c.tempUnit !== 'C' ? 'selected' : ''}>°F (US default)</option>
+              <option value="C" ${c.tempUnit === 'C' ? 'selected' : ''}>°C</option>
+            </select>
+          </div>
+        </div>
+      </fieldset>`;
+  }
+
+  function wireConditionsOtherToggles() {
+    const pairs = [
+      ['f-time-of-day', 'f-time-other-wrap'],
+      ['f-weather', 'f-weather-other-wrap'],
+      ['f-building-type', 'f-building-other-wrap'],
+    ];
+    pairs.forEach(([selId, wrapId]) => {
+      const sel = document.getElementById(selId);
+      const wrap = document.getElementById(wrapId);
+      if (!sel || !wrap) return;
+      const sync = () => {
+        if (sel.value === 'other') wrap.classList.remove('hidden');
+        else wrap.classList.add('hidden');
+      };
+      sel.addEventListener('change', sync);
+      sync();
+    });
+  }
+
+  function readConditionsFromForm(fd) {
+    return normalizeConditions({
+      occupancy: fd.get('occupancy'),
+      timeOfDay: fd.get('timeOfDay'),
+      timeOfDayOther: fd.get('timeOfDayOther'),
+      weather: fd.get('weather'),
+      weatherOther: fd.get('weatherOther'),
+      outdoorTemp: fd.get('outdoorTemp'),
+      tempUnit: fd.get('tempUnit'),
+      buildingType: fd.get('buildingType'),
+      buildingTypeOther: fd.get('buildingTypeOther'),
+    });
+  }
+
+  function reportConditionsStripHtml(job) {
+    const rows = formatConditionsDisplay(job);
+    return `
+      <div class="report-conditions">
+        <div class="report-conditions-title">Inspection conditions</div>
+        <div class="report-conditions-grid">
+          ${rows.map((r) => `
+            <div class="report-condition-card">
+              <div class="report-condition-key">${escapeHtml(r.key)}</div>
+              <div class="report-condition-val">${escapeHtml(r.value)}</div>
+            </div>`).join('')}
+        </div>
+      </div>`;
+  }
+
   function sectionStats(job, sectionId) {
     const s = job.sections[sectionId] || emptySection();
     const hasNotes = !!(s.notes && s.notes.trim());
@@ -428,11 +600,16 @@
 
   function renderJobForm() {
     const editing = editingJobId ? getJob(editingJobId) : null;
+    if (editing) ensureJobShape(editing);
     const today = new Date().toISOString().slice(0, 10);
     const addr = editing ? editing.address : '';
     const client = editing ? editing.client : '';
     const date = editing ? editing.date : today;
     const inspector = editing ? editing.inspector : '';
+    const company = editing ? editing.company : '';
+    const phone = editing ? editing.phone : '';
+    const email = editing ? editing.email : '';
+    const conditions = editing ? editing.conditions : defaultConditions();
     $main.innerHTML = `
       <div class="page-intro">
         <h2>${editing ? 'Edit inspection job' : 'New inspection job'}</h2>
@@ -459,6 +636,21 @@
           <label for="f-inspector">Inspector name</label>
           <input id="f-inspector" name="inspector" placeholder="Your name" value="${escapeHtml(inspector)}" />
         </div>
+        <div class="form-group">
+          <label for="f-company">Company <span class="form-hint-inline">(optional)</span></label>
+          <input id="f-company" name="company" placeholder="Company or LLC" value="${escapeHtml(company)}" />
+        </div>
+        <div class="form-row-2">
+          <div class="form-group">
+            <label for="f-phone">Phone <span class="form-hint-inline">(optional)</span></label>
+            <input id="f-phone" name="phone" type="tel" placeholder="(555) 555-0100" value="${escapeHtml(phone)}" />
+          </div>
+          <div class="form-group">
+            <label for="f-email">Email <span class="form-hint-inline">(optional)</span></label>
+            <input id="f-email" name="email" type="email" placeholder="you@company.com" value="${escapeHtml(email)}" />
+          </div>
+        </div>
+        ${conditionsFormHtml(conditions)}
         <div class="btn-row">
           <button type="button" class="btn btn-outline" id="btn-cancel-form">Cancel</button>
           <button type="submit" class="btn btn-primary">${editing ? 'Save changes' : 'Create job'}</button>
@@ -470,6 +662,7 @@
       else navigate('jobs');
     };
     wireAddressAutocomplete(document.getElementById('f-address'), document.getElementById('ac-list'));
+    wireConditionsOtherToggles();
     document.getElementById('job-form').onsubmit = (e) => {
       e.preventDefault();
       const fd = new FormData(e.target);
@@ -478,12 +671,20 @@
         client: (fd.get('client') || '').trim(),
         date: fd.get('date'),
         inspector: (fd.get('inspector') || '').trim(),
+        company: (fd.get('company') || '').trim(),
+        phone: (fd.get('phone') || '').trim(),
+        email: (fd.get('email') || '').trim(),
+        conditions: readConditionsFromForm(fd),
       };
       if (editing) {
         editing.address = meta.address;
         editing.client = meta.client;
         editing.date = meta.date;
         editing.inspector = meta.inspector;
+        editing.company = meta.company;
+        editing.phone = meta.phone;
+        editing.email = meta.email;
+        editing.conditions = meta.conditions;
         saveStore();
         toast('Job updated');
         editingJobId = null;
@@ -545,6 +746,9 @@
           <span>${escapeHtml(job.client || '—')}</span>
           <span>${formatDate(job.date)}</span>
           <span>${escapeHtml(job.inspector || '—')}</span>
+        </div>
+        <div class="job-conditions-chiprow" aria-label="Inspection conditions">
+          ${formatConditionsDisplay(job).map((r) => `<span class="job-cond-chip"><em>${escapeHtml(r.key)}</em> ${escapeHtml(r.value)}</span>`).join('')}
         </div>
         <div class="progress-label" style="margin-top:12px">${prog.filled} of ${prog.total} systems have notes or findings</div>
         <div class="progress-bar"><div class="progress-fill" style="width:${prog.pct}%"></div></div>
@@ -782,15 +986,13 @@
                         <option value="maintenance" ${sev === 'maintenance' ? 'selected' : ''}>Maintenance</option>
                       </select>
                     </div>
+                    ${findingEditExtrasHtml(f)}
                     <div class="finding-actions">
                       <button type="button" class="btn btn-primary btn-sm" data-save-finding="${f.id}">Save</button>
                       <button type="button" class="btn btn-outline btn-sm" data-cancel-edit>Cancel</button>
                     </div>
                   </div>`;
               }
-              const sevBadge = f.severity
-                ? `<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span>`
-                : '';
               const punchAuto = isPunchSeverity(f.severity);
               const punchManual = !!f.onPunchList;
               let punchBtn = '';
@@ -803,7 +1005,8 @@
               }
               return `
                 <div class="finding-card${punchAuto || punchManual ? ' on-punch' : ''}" data-finding="${f.id}">
-                  <div class="finding-label">Observation ${sevBadge}</div>
+                  ${findingMetaBadgesHtml(f)}
+                  <div class="finding-label">Observation</div>
                   <div class="finding-obs">${escapeHtml(f.observation)}</div>
                   ${
                     f.recommendation
@@ -986,9 +1189,11 @@
       };
     });
 
+    if (editingFindingId) wireTradeOtherToggle();
+
     document.getElementById('btn-add-finding').onclick = () => {
       data.notes = notesEl.value;
-      const f = { id: uid(), observation: '', recommendation: '', severity: '', onPunchList: false };
+      const f = emptyFinding();
       data.findings.push(f);
       editingFindingId = f.id;
       saveStore();
@@ -1018,6 +1223,7 @@
         f.recommendation = document.getElementById('edit-rec').value.trim();
         const sevEl = document.getElementById('edit-sev');
         f.severity = sevEl ? (sevEl.value || '') : (f.severity || '');
+        readFindingExtrasInto(f);
         if (!f.observation) {
           toast('Observation required');
           return;
@@ -1494,13 +1700,20 @@
     if (opts.showOpen) {
       actions += `<button type="button" class="btn btn-outline btn-sm" data-open-section="${item.sectionId}">Open system</button>`;
     }
+    const trade = tradeDisplay(f);
+    const tradeBadge = trade ? `<span class="trade-badge">${escapeHtml(trade)}</span>` : '';
+    const locLine = f.location && String(f.location).trim()
+      ? `<div class="punch-item-loc">📍 ${escapeHtml(String(f.location).trim())}</div>`
+      : '';
     return `
       <div class="punch-item-card">
         <div class="punch-item-top">
           <span class="punch-system">${item.sectionIcon || ''} ${escapeHtml(item.sectionName)}</span>
           ${sevBadge}
+          ${tradeBadge}
           ${via}
         </div>
+        ${locLine}
         <div class="punch-item-obs">${escapeHtml(f.observation)}</div>
         ${
           f.recommendation
@@ -1596,10 +1809,17 @@
         const sev = f.severity
           ? `<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span> `
           : `<span class="sev-badge sev-manual">Added</span> `;
+        const trade = tradeDisplay(f);
+        const tradeB = trade ? `<span class="trade-badge">${escapeHtml(trade)}</span> ` : '';
+        const loc = f.location && String(f.location).trim()
+          ? `<div class="report-finding-loc">📍 ${escapeHtml(String(f.location).trim())}</div>`
+          : '';
         return `
           <div class="report-finding report-punch-item">
             <div class="punch-report-system">${escapeHtml(it.sectionName)}</div>
-            <div class="obs">${sev}${escapeHtml(f.observation)}</div>
+            <div class="report-finding-badges">${sev}${tradeB}</div>
+            ${loc}
+            <div class="obs">${escapeHtml(f.observation)}</div>
             ${f.recommendation ? `<div class="rec"><strong>Recommendation:</strong> ${escapeHtml(f.recommendation)}</div>` : ''}
           </div>`;
       })
@@ -1630,13 +1850,23 @@
       let findingsBlock = '';
       if (data.findings.length) {
         findingsBlock = data.findings
-          .map(
-            (f) => `
+          .map((f) => {
+            const sev = f.severity
+              ? `<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span>`
+              : '';
+            const trade = tradeDisplay(f);
+            const tradeB = trade ? `<span class="trade-badge">${escapeHtml(trade)}</span>` : '';
+            const loc = f.location && String(f.location).trim()
+              ? `<div class="report-finding-loc">📍 ${escapeHtml(String(f.location).trim())}</div>`
+              : '';
+            return `
             <div class="report-finding">
-              <div class="obs">${f.severity ? `<span class="sev-badge sev-${escapeHtml(f.severity)}">${escapeHtml(severityLabel(f.severity))}</span> ` : ''}${escapeHtml(f.observation)}</div>
+              <div class="report-finding-badges">${sev}${tradeB}</div>
+              ${loc}
+              <div class="obs">${escapeHtml(f.observation)}</div>
               ${f.recommendation ? `<div class="rec"><strong>Recommendation:</strong> ${escapeHtml(f.recommendation)}</div>` : ''}
-            </div>`
-          )
+            </div>`;
+          })
           .join('');
       } else if (data.notes.trim()) {
         findingsBlock = `<div class="report-notes-raw"><strong>Raw notes (not yet structured):</strong>
@@ -1682,30 +1912,57 @@ ${escapeHtml(data.notes)}</div>`;
           <button type="button" class="btn btn-primary" id="btn-goto-export">Continue to Export</button>
         </div>`;
 
+    const contactBits = [];
+    if (job.phone) contactBits.push(escapeHtml(job.phone));
+    if (job.email) contactBits.push(escapeHtml(job.email));
+    const contactLine = contactBits.length
+      ? `<div class="report-inspector-contact">${contactBits.join(' · ')}</div>`
+      : '';
+    const companyLine = job.company
+      ? `<div class="report-inspector-company">${escapeHtml(job.company)}</div>`
+      : '';
+    const inspectorBlock = `
+      <div class="report-inspector-block">
+        <div class="report-inspector-name">${escapeHtml(job.inspector || 'Inspector')}</div>
+        ${companyLine}
+        ${contactLine}
+      </div>`;
+
     $main.innerHTML = `
       ${actions}
       <article class="report" id="report-doc">
         <header class="report-header">
+          <div class="report-cover-bar" aria-hidden="true"></div>
           <div class="report-brand-row">
-            <img src="assets/brand/logo-mark-navy.svg" alt="InspectDraft" width="36" height="36" />
-            <div>
-              <div class="brand"><span class="inspect">Inspect</span><span class="draft">Draft</span> · Draft Report</div>
+            <img class="report-logo" src="assets/brand/logo-mark-navy.svg" alt="" width="44" height="44" />
+            <div class="report-brand-text">
+              <div class="brand"><span class="inspect">Inspect</span><span class="draft">Draft</span></div>
               <div class="brand-sub">INSPECT / CAPTURE / REPORT</div>
             </div>
+            ${inspectorBlock}
           </div>
-          <h1>${escapeHtml(job.address)}</h1>
+          <div class="report-title-block">
+            <p class="report-doc-label">Inspection Draft Report</p>
+            <h1>${escapeHtml(job.address)}</h1>
+            <p class="report-date-line">${formatDate(job.date)}</p>
+          </div>
           <div class="report-meta">
-            <div><strong>Client:</strong> ${escapeHtml(job.client || '—')}</div>
-            <div><strong>Inspection date:</strong> ${formatDate(job.date)}</div>
-            <div><strong>Inspector:</strong> ${escapeHtml(job.inspector || '—')}</div>
-            <div><strong>Generated:</strong> ${formatDate(new Date().toISOString().slice(0, 10))}</div>
+            <div><strong>Client</strong><span>${escapeHtml(job.client || '—')}</span></div>
+            <div><strong>Inspection date</strong><span>${formatDate(job.date)}</span></div>
+            <div><strong>Inspector</strong><span>${escapeHtml(job.inspector || '—')}</span></div>
+            <div><strong>Generated</strong><span>${formatDate(new Date().toISOString().slice(0, 10))}</span></div>
           </div>
+          ${reportConditionsStripHtml(job)}
         </header>
         ${sectionsHtml}
         <footer class="report-footer">
-          <p>This document is a working draft assembled from field notes. It is not a final certified inspection report unless reviewed and signed by the inspector of record.</p>
+          <p>This document is a working draft assembled from field notes for professional review. It is not a final certified inspection report unless reviewed and signed by the inspector of record. Scope and standards are those of the inspector’s practice — this companion draft does not replace a full inspection agreement or final delivery package.</p>
           <div class="report-disclaimer">
-            Draft for professional review. AI-assisted structuring — verify all findings.
+            <strong>Draft for professional review.</strong> AI-assisted structuring — verify all findings. InspectDraft only organizes the inspector’s own words.
+          </div>
+          <div class="report-footer-brand">
+            <span class="inspect">Inspect</span><span class="draft">Draft</span>
+            <span class="report-footer-tag">Companion draft tool</span>
           </div>
         </footer>
       </article>
